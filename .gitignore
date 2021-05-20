@@ -17,3 +17,4 @@
 chaintracker/chaintracker
 repeatnonce/repeatnonce
 *.log
+.idea

@@ -1,0 +1,1 @@
+curl -X POST --data '{"method":"getblockcount.Call","params":[],"id":1}'  -H "Content-Type: text/plain" http://localhost:1234
