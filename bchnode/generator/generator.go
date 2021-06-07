@@ -1,12 +1,15 @@
 package generator
 
 import (
-	"fmt"
+	"encoding/binary"
+	"encoding/hex"
 	"io"
 	"log"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 var Version = "00"
@@ -137,6 +140,9 @@ func BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *Bl
 	ti := BuildTxWithPubkey(0, bi.Hash, pubkey)
 	//change ctx
 	Ctx.RWLock.Lock()
+	if bi.Height > 1 {
+		bi.PreviousBlockhash = Ctx.BlkByHash[Ctx.BlkHashByHeight[bi.Height-1]].Hash
+	}
 	Ctx.BlkByHash[bi.Hash] = bi
 	Ctx.BlkHashByHeight[Ctx.NextBlockHeight] = bi.Hash
 	Ctx.TxByHash[ti.Hash] = ti
@@ -155,17 +161,23 @@ func BuildTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
 	v := Vout{
 		ScriptPubKey: make(map[string]interface{}),
 	}
-	v.ScriptPubKey["asm"] = "OP_RETURN" + Identifier + Version + pubkey
+	v.ScriptPubKey["asm"] = "OP_RETURN " + Identifier + Version + pubkey
 	ti.VoutList = append(ti.VoutList, v)
 	return ti
 }
 
 func buildTxHash(blockHash string, txIndex int64) string {
-	return fmt.Sprintf("%s-%d", blockHash, txIndex)
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], uint64(txIndex))
+	return blockHash + hex.EncodeToString(b[:])
+	//return fmt.Sprintf("%s-%d", blockHash, txIndex)
 }
 
 func buildBlockHash(height int64) string {
-	return fmt.Sprintf("%d.%d", height, time.Now().Unix())
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], uint64(height))
+	return hex.EncodeToString(b[:]) + hexutil.EncodeUint64(uint64(time.Now().Unix()))[2:]
+	//return fmt.Sprintf("%d.%d", height, time.Now().Unix())
 }
 
 type PubKeyInfo struct {

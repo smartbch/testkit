@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,6 +69,7 @@ func (_ *PubKeyService) Call(r *http.Request, args *string, result *string) erro
 		Pubkey: s[0],
 	}
 	vp, err := strconv.Atoi(s[1])
+	fmt.Printf("voting power: %d\n", vp)
 	if err != nil {
 		return errors.New("invalid voting power")
 	}

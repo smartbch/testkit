@@ -20,7 +20,7 @@ func (p *Producer) Start() {
 		}
 		bi := BuildBlockRespWithCoinbaseTx(getPubkey())
 		if bi == nil {
-			time.Sleep(30 * time.Second)
+			time.Sleep(10 * time.Second)
 			Ctx.Log.Println("no pubkey info")
 			continue
 		}

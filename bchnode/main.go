@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/smartbch/testkit/bchnode/generator"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -9,6 +8,7 @@ import (
 	"github.com/gorilla/rpc/json"
 
 	"github.com/smartbch/testkit/bchnode/api"
+	"github.com/smartbch/testkit/bchnode/generator"
 )
 
 func main() {
