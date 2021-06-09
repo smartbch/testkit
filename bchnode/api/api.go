@@ -95,3 +95,11 @@ func (_ *BlockInternalService) Call(r *http.Request, args *int64, result *string
 	*result = "send success"
 	return nil
 }
+
+type BlockReorgService struct{}
+
+func (_ *BlockReorgService) Call(r *http.Request, args *int64, result *string) error {
+	generator.Ctx.Producer.Reorg <- true
+	*result = "send success"
+	return nil
+}

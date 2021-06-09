@@ -50,6 +50,7 @@ func Init() {
 	//init producer
 	Ctx.Producer = &Producer{
 		Exit:              make(chan bool),
+		Reorg:             make(chan bool, 1),
 		BlockInternalTime: 3,
 	}
 	go Ctx.Producer.Start()
@@ -121,6 +122,42 @@ type TxInfo struct {
 	Confirmations int                      `json:"confirmations"`
 	Time          int64                    `json:"time"`
 	BlockTime     int64                    `json:"blocktime"`
+}
+
+var reorgBlockNumbers int64 = 8
+
+func ReorgBlock() {
+	h := Ctx.NextBlockHeight
+	initHeight := h - reorgBlockNumbers
+	if initHeight <= 1 {
+		return
+	}
+	Ctx.RWLock.Lock()
+	for i := int64(0); i < reorgBlockNumbers; i++ {
+		bi := &BlockInfo{
+			Hash: buildBlockHash(initHeight),
+			Confirmations: 1,      //1 confirm
+			Size:          100000, //100k
+			Height:        initHeight,
+			Version:       8888, //for test
+			Time:          time.Now().Unix(),
+			NumTx:         1,
+		}
+		bi.Tx = append(bi.Tx, buildTxHash(bi.Hash, 0))
+		ti := BuildTxWithPubkey(0, bi.Hash, "reorg_tx")
+		//change ctx
+		if bi.Height > 1 {
+			bi.PreviousBlockhash = Ctx.BlkByHash[Ctx.BlkHashByHeight[bi.Height-1]].Hash
+		}
+		Ctx.BlkByHash[bi.Hash] = bi
+		Ctx.BlkHashByHeight[initHeight] = bi.Hash
+		Ctx.TxByHash[ti.Hash] = ti
+		initHeight++
+
+		Ctx.Log.Printf("Reorg: new block: %d, %s; coinbase tx: hash:%s, pubkey:%s, parentHash:%s\n", bi.Height, bi.Hash, ti.Hash, "reorg_tx", bi.PreviousBlockhash)
+	}
+	Ctx.RWLock.Unlock()
+	return
 }
 
 func BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *BlockInfo {

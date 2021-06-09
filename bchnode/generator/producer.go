@@ -8,6 +8,7 @@ import (
 
 type Producer struct {
 	Exit              chan bool
+	Reorg             chan bool
 	Lock              sync.Mutex
 	BlockInternalTime int64 //uint: second
 }
@@ -16,15 +17,18 @@ func (p *Producer) Start() {
 	for {
 		select {
 		case <-p.Exit:
+			return
+		case <-p.Reorg:
+			ReorgBlock()
 		default:
+			bi := BuildBlockRespWithCoinbaseTx(getPubkey())
+			if bi == nil {
+				time.Sleep(10 * time.Second)
+				Ctx.Log.Println("no pubkey info")
+				continue
+			}
+			time.Sleep(time.Duration(p.BlockInternalTime) * time.Second)
 		}
-		bi := BuildBlockRespWithCoinbaseTx(getPubkey())
-		if bi == nil {
-			time.Sleep(10 * time.Second)
-			Ctx.Log.Println("no pubkey info")
-			continue
-		}
-		time.Sleep(time.Duration(p.BlockInternalTime) * time.Second)
 	}
 }
 
