@@ -185,7 +185,10 @@ func BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *Bl
 	Ctx.TxByHash[ti.Hash] = ti
 	Ctx.NextBlockHeight++
 	Ctx.RWLock.Unlock()
-	Ctx.Log.Printf("new block: %d, %s; coinbase tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
+	//limit log amount
+	if bi.Height % 20 == 1 {
+		Ctx.Log.Printf("new block: %d, %s; coinbase tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
+	}
 	return bi
 }
 

@@ -76,10 +76,13 @@ func (_ *PubKeyService) Call(r *http.Request, args *string, result *string) erro
 	info.RemainCount = int64(vp)
 	info.VotingPower = int64(vp)
 	generator.Ctx.RWLock.Lock()
-	if s[2] == "add" || s[2] == "modify" {
+	if s[2] == "add" || s[2] == "edit" {
 		generator.Ctx.PubkeyInfoByPubkey[info.Pubkey] = info
-	} else {
+	} else if s[2] == "retire" {
 		delete(generator.Ctx.PubkeyInfoByPubkey, info.Pubkey)
+	} else {
+		generator.Ctx.RWLock.Unlock()
+		return errors.New("invalid action")
 	}
 	generator.Ctx.RWLock.Unlock()
 	*result = "send success"
