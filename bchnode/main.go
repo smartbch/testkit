@@ -19,7 +19,7 @@ func main() {
 	_ = s.RegisterService(new(api.BlockService), "getblock")
 	_ = s.RegisterService(new(api.TxService), "getrawtransaction")
 	_ = s.RegisterService(new(api.PubKeyService), "pubkey")
-	_ = s.RegisterService(new(api.BlockInternalService), "internal")
+	_ = s.RegisterService(new(api.BlockIntervalService), "interval")
 	_ = s.RegisterService(new(api.BlockReorgService), "reorg")
 
 	r := mux.NewRouter()

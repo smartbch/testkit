@@ -10,7 +10,7 @@ type Producer struct {
 	Exit              chan bool
 	Reorg             chan bool
 	Lock              sync.Mutex
-	BlockInternalTime int64 //uint: second
+	BlockIntervalTime int64 //uint: second
 }
 
 func (p *Producer) Start() {
@@ -27,7 +27,7 @@ func (p *Producer) Start() {
 				Ctx.Log.Println("no pubkey info")
 				continue
 			}
-			time.Sleep(time.Duration(p.BlockInternalTime) * time.Second)
+			time.Sleep(time.Duration(p.BlockIntervalTime) * time.Second)
 		}
 	}
 }

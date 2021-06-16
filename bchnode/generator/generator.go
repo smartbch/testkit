@@ -51,7 +51,7 @@ func Init() {
 	Ctx.Producer = &Producer{
 		Exit:              make(chan bool),
 		Reorg:             make(chan bool, 1),
-		BlockInternalTime: 3,
+		BlockIntervalTime: 3,
 	}
 	go Ctx.Producer.Start()
 }

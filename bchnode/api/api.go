@@ -86,11 +86,11 @@ func (_ *PubKeyService) Call(r *http.Request, args *string, result *string) erro
 	return nil
 }
 
-type BlockInternalService struct{}
+type BlockIntervalService struct{}
 
-func (_ *BlockInternalService) Call(r *http.Request, args *int64, result *string) error {
+func (_ *BlockIntervalService) Call(r *http.Request, args *int64, result *string) error {
 	generator.Ctx.Producer.Lock.Lock()
-	generator.Ctx.Producer.BlockInternalTime = *args
+	generator.Ctx.Producer.BlockIntervalTime = *args
 	generator.Ctx.Producer.Lock.Unlock()
 	*result = "send success"
 	return nil
