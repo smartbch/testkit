@@ -135,7 +135,7 @@ func ReorgBlock() {
 	Ctx.RWLock.Lock()
 	for i := int64(0); i < reorgBlockNumbers; i++ {
 		bi := &BlockInfo{
-			Hash: buildBlockHash(initHeight),
+			Hash:          buildBlockHash(initHeight),
 			Confirmations: 1,      //1 confirm
 			Size:          100000, //100k
 			Height:        initHeight,
@@ -186,7 +186,7 @@ func BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *Bl
 	Ctx.NextBlockHeight++
 	Ctx.RWLock.Unlock()
 	//limit log amount
-	if bi.Height % 20 == 1 {
+	if bi.Height%20 == 1 {
 		Ctx.Log.Printf("new block: %d, %s; coinbase tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
 	}
 	return bi
