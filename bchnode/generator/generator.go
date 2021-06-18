@@ -1,11 +1,14 @@
 package generator
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +21,8 @@ var Identifier = "73424348"
 type Context struct {
 	RWLock sync.RWMutex
 
-	Log *log.Logger
+	Log      *log.Logger
+	BlockLog *log.Logger
 
 	Producer *Producer
 
@@ -41,18 +45,27 @@ func Init() {
 	Ctx.BlkByHash = make(map[string]*BlockInfo)
 	Ctx.BlkHashByHeight = make(map[int64]string)
 	Ctx.PubkeyInfoByPubkey = make(map[string]*PubKeyInfo)
+
 	//inti logger
 	file, err := os.OpenFile("out.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}
 	Ctx.Log = log.New(io.MultiWriter(file, os.Stdout), "INFO: ", log.Ltime|log.Lshortfile)
+
+	blockFile, err := os.OpenFile("block.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	Ctx.BlockLog = log.New(blockFile, "", log.Ltime|log.Lshortfile)
+
 	//init producer
 	Ctx.Producer = &Producer{
 		Exit:              make(chan bool),
 		Reorg:             make(chan bool, 1),
 		BlockIntervalTime: 3,
 	}
+	loadBlocksFromLog()
 	go Ctx.Producer.Start()
 }
 
@@ -155,6 +168,7 @@ func ReorgBlock() {
 		initHeight++
 
 		Ctx.Log.Printf("Reorg: new block: %d, %s; coinbase tx: hash:%s, pubkey:%s, parentHash:%s\n", bi.Height, bi.Hash, ti.Hash, "reorg_tx", bi.PreviousBlockhash)
+		logBlock(bi, ti)
 	}
 	Ctx.RWLock.Unlock()
 	return
@@ -189,6 +203,7 @@ func BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *Bl
 	if bi.Height%20 == 1 {
 		Ctx.Log.Printf("new block: %d, %s; coinbase tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
 	}
+	logBlock(bi, ti)
 	return bi
 }
 
@@ -224,4 +239,50 @@ type PubKeyInfo struct {
 	Pubkey      string
 	VotingPower int64
 	RemainCount int64 //init same with Voting power
+}
+
+func logBlock(bi *BlockInfo, ti *TxInfo) {
+	biJSON, _ := json.Marshal(bi)
+	Ctx.BlockLog.Println("block: ", string(biJSON))
+
+	tiJSON, _ := json.Marshal(ti)
+	Ctx.BlockLog.Println("tx: ", string(tiJSON))
+}
+
+func loadBlocksFromLog() {
+	Ctx.Log.Println("loading blocks from log ...")
+
+	f, err := os.Open("block.log")
+	if err != nil {
+		Ctx.Log.Println(err.Error())
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if idx := strings.Index(line, "block:"); idx > 0 {
+			bi := &BlockInfo{}
+			err := json.Unmarshal([]byte(line[idx+6:]), bi)
+			if err != nil {
+				panic(err)
+			}
+			Ctx.Log.Printf("loaded block: %d\n", bi.Height)
+			Ctx.BlkByHash[bi.Hash] = bi
+			Ctx.BlkHashByHeight[bi.Height] = bi.Hash
+			Ctx.NextBlockHeight = bi.Height + 1
+		}
+		if idx := strings.Index(line, "tx:"); idx > 0 {
+			ti := &TxInfo{}
+			err := json.Unmarshal([]byte(line[idx+3:]), ti)
+			if err != nil {
+				panic(err)
+			}
+			Ctx.Log.Printf("loaded tx: %s\n", ti.Hash)
+			Ctx.TxByHash[ti.Hash] = ti
+		}
+	}
 }
