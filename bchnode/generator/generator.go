@@ -231,8 +231,9 @@ func buildTxHash(blockHash string, txIndex int64) string {
 func buildBlockHash(height int64) string {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], uint64(height))
-	return hex.EncodeToString(b[:]) + hexutil.EncodeUint64(uint64(time.Now().Unix()))[2:]
-	//return fmt.Sprintf("%d.%d", height, time.Now().Unix())
+	var hash [32]byte
+	copy(hash[:], hex.EncodeToString(b[:])+hexutil.EncodeUint64(uint64(time.Now().Unix()))[2:])
+	return hex.EncodeToString(hash[:])
 }
 
 type PubKeyInfo struct {
