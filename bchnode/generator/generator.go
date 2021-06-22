@@ -314,7 +314,7 @@ func logPubKeysOnExit() {
 
 func trapSignal(cleanupFunc func()) {
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	go func() {
 		sig := <-sigs
 		if cleanupFunc != nil {
@@ -326,6 +326,8 @@ func trapSignal(cleanupFunc func()) {
 			exitCode += int(syscall.SIGINT)
 		case syscall.SIGTERM:
 			exitCode += int(syscall.SIGTERM)
+		case syscall.SIGKILL:
+			exitCode += int(syscall.SIGKILL)
 		}
 		os.Exit(exitCode)
 	}()
