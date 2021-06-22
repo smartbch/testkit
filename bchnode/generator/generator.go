@@ -302,6 +302,7 @@ func loadBlocksFromLog() {
 
 func logPubKeysOnExit() {
 	trapSignal(func() {
+		Ctx.Log.Println("saving pubkeys ...")
 		bytes, err := json.Marshal(Ctx.PubkeyInfoByPubkey)
 		if err == nil {
 			Ctx.BlockLog.Println("pubkey: ", string(bytes))
