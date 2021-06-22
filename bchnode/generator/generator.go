@@ -8,8 +8,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -66,6 +68,7 @@ func Init() {
 		BlockIntervalTime: 3,
 	}
 	loadBlocksFromLog()
+	logPubKeysOnExit()
 	go Ctx.Producer.Start()
 }
 
@@ -285,5 +288,44 @@ func loadBlocksFromLog() {
 			Ctx.Log.Printf("loaded tx: %s\n", ti.Hash)
 			Ctx.TxByHash[ti.Hash] = ti
 		}
+		if idx := strings.Index(line, "pubkey:"); idx > 0 {
+			pubkeys := map[string]*PubKeyInfo{}
+			err := json.Unmarshal([]byte(line[idx+7:]), &pubkeys)
+			if err != nil {
+				panic(err)
+			}
+			Ctx.Log.Println("loaded pubkeys: ", line[idx+7:])
+			Ctx.PubkeyInfoByPubkey = pubkeys
+		}
 	}
+}
+
+func logPubKeysOnExit() {
+	trapSignal(func() {
+		bytes, err := json.Marshal(Ctx.PubkeyInfoByPubkey)
+		if err == nil {
+			Ctx.BlockLog.Println("pubkey: ", string(bytes))
+		} else {
+			Ctx.Log.Println(err.Error())
+		}
+	})
+}
+
+func trapSignal(cleanupFunc func()) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigs
+		if cleanupFunc != nil {
+			cleanupFunc()
+		}
+		exitCode := 128
+		switch sig {
+		case syscall.SIGINT:
+			exitCode += int(syscall.SIGINT)
+		case syscall.SIGTERM:
+			exitCode += int(syscall.SIGTERM)
+		}
+		os.Exit(exitCode)
+	}()
 }
