@@ -10,7 +10,12 @@ import (
 
 func main() {
 	if len(os.Args) < 6 {
-		fmt.Println("Usage: brokerchanger <rpcURL> <username> <password> <interval in seconds> <pubkey1=vp1> <pubkey2=vp2> ...")
+		fmt.Println(`Usage: brokerchanger <rpcURL> <username> <password> <interval in seconds> <pubkey1=vp1> <pubkey2=vp2> ...
+
+example:
+brokerchanger http://47.115.171.70:28332/set_smartbch_brokerid.php regtest PLEXv-8D-FxWPMiXbspL 5 \
+  0c54b6c7f07ebc6dfb6b192163c002dab348b56ce809688a222b3cf98eca36ee=1 \
+  0c54b6c7f07ebc6dfb6b192163c002dab348b56ce809688a222b3cf98eca36ef=3`)
 		return
 	}
 
