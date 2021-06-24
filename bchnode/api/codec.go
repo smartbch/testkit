@@ -39,8 +39,8 @@ func (c *MyCodecRequest) Method() (string, error) {
 }
 
 type JsonRpcError struct {
-	Code    int `json:"code"`
-	Message int `json:"message"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 type serverRequest struct {
@@ -81,7 +81,7 @@ func (c *MyCodecRequest) WriteResponse(w http.ResponseWriter, reply interface{},
 	if methodErr != nil {
 		res.Error = JsonRpcError{
 			Code:    -1,
-			Message: -1,
+			Message: methodErr.Error(),
 		}
 		res.Result = &null
 	}
