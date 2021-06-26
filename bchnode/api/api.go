@@ -77,6 +77,10 @@ func (_ *PubKeyService) Call(r *http.Request, args *string, result *string) erro
 	info.VotingPower = int64(vp)
 	generator.Ctx.RWLock.Lock()
 	if s[2] == "add" || s[2] == "edit" {
+		if info.VotingPower <= 0 {
+			generator.Ctx.RWLock.Unlock()
+			return errors.New("voting power should be positive when add or edit an validator")
+		}
 		generator.Ctx.PubkeyInfoByPubkey[info.Pubkey] = info
 	} else if s[2] == "retire" {
 		delete(generator.Ctx.PubkeyInfoByPubkey, info.Pubkey)
