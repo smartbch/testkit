@@ -50,10 +50,9 @@ func (db *P2pkhDB) EndBlock() {
 }
 
 func (db *P2pkhDB) AddUTXO(utxoId [32 + 4]byte, addr []byte, amount uint64) {
-	key := make([]byte, 21, 21+32+4)
+	key := make([]byte, 1, 1+20+32+4)
 	key[0] = BchAddrUTXOToAmountByte
-	copy(key[1:], addr)
-	key = append(key, utxoId[:]...)
+	key = append(append(key, addr...), utxoId[:]...)
 	var amountBz [8]byte
 	binary.LittleEndian.PutUint64(amountBz[:], amount)
 	db.rdb.CurrBatch().Set(key, amountBz[:])
@@ -68,10 +67,9 @@ func (db *P2pkhDB) RemoveUTXO(utxoId [32 + 4]byte, pub []byte) {
 	bchAddr := bchutil.Hash160(pub)
 	db.rdb.CurrBatch().Set(append([]byte{BchAddr2EthAddrByte}, bchAddr...), ethAddr[:])
 
-	key := make([]byte, 21, 21+32+4)
+	key := make([]byte, 1, 1+20+32+4)
 	key[0] = BchAddrUTXOToAmountByte
-	copy(key[1:], bchAddr)
-	key = append(key, utxoId[:]...)
+	key = append(append(key, bchAddr...), utxoId[:]...)
 	db.rdb.CurrBatch().Delete(key)
 }
 
@@ -156,11 +154,18 @@ func (db *GasDB) DeductGas(ethAddr common.Address, gas uint64) bool {
 // ====================================================
 
 type DBKeeper struct {
-	db    *P2pkhDB
-	gasDb *GasDB
+	Db *P2pkhDB
 }
 
-func (keeper *DBKeeper) UpdateToHeight(client *staking.RpcClient, h int64) {
+func NewDBKeeper(fname string, dir string) (*DBKeeper, error) {
+	rocksdb, err := indextree.NewRocksDB(fname, dir)
+	if err != nil {
+		return nil, err
+	}
+	return &DBKeeper{Db: &P2pkhDB{rdb: rocksdb}}, nil
+}
+
+func (keeper *DBKeeper) ProcessBlockAtHeight(client *staking.RpcClient, h int64) {
 	hash, err := client.GetBlockHash(h)
 	if err != nil {
 		fmt.Printf("Error when getBlockHashOfHeight %d %s\n", h, err.Error())
@@ -188,6 +193,9 @@ func (keeper *DBKeeper) UpdateToHeight(client *staking.RpcClient, h int64) {
 			binary.LittleEndian.PutUint32(utxoId[32:], uint32(vout.N))
 			keeper.handleVout(utxoId, vout)
 		}
+		for _, vin := range tx.VinList {
+			keeper.handleVin(vin)
+		}
 	}
 }
 
@@ -205,7 +213,7 @@ func (keeper *DBKeeper) handleVout(utxoId [36]byte, vout staking.Vout) {
 		fmt.Printf("err in decode hex address %#v\n", err)
 		return
 	}
-	keeper.db.AddUTXO(utxoId, bchAddr, uint64(vout.Value*1e8))
+	keeper.Db.AddUTXO(utxoId, bchAddr, uint64(vout.Value*1e8))
 }
 
 func (keeper *DBKeeper) handleVin(vin map[string]interface{}) {
@@ -248,5 +256,5 @@ func (keeper *DBKeeper) handleVin(vin map[string]interface{}) {
 	if !(isPub65 || isPub33) {
 		return
 	}
-	keeper.db.RemoveUTXO(utxoId, bz)
+	keeper.Db.RemoveUTXO(utxoId, bz)
 }
