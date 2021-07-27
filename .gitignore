@@ -18,4 +18,3 @@ chaintracker/chaintracker
 repeatnonce/repeatnonce
 *.log
 .idea
-p2pkhDB/run/run
