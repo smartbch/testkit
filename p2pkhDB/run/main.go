@@ -13,21 +13,20 @@ import (
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchutil"
 	"github.com/smartbch/smartbch/staking"
-
-	"github.com/smartbch/testkit/p2pkhdb"
 )
 
-func hehe() {
+func test() {
 	privKey, _ := crypto.GenerateKey()
 	pubKey := privKey.PublicKey
 	bz := elliptic.Marshal(pubKey.Curve, pubKey.X, pubKey.Y)
 	fmt.Printf("haha %d %#v\n", len(bz), bz)
-	//bitcoincash:qqqsjenhvqrf2024vapeuh3elp4q6femac89k2dn50
-	//bz, _ := hex.DecodeString("0450863AD64A87AE8A2FE83C1AF1A8403CB53F53E486D8511DAD8A04887E5B23522CD470243453A299FA9E77237716103ABC11A1DF38855ED6F2EE187E9C582BA6")
-	//fmt.Println(pubkey2cashaddr(bz))
 }
 
 func main() {
+	test()
+	//bitcoincash:qqqsjenhvqrf2024vapeuh3elp4q6femac89k2dn50
+	bz, _ := hex.DecodeString("0450863AD64A87AE8A2FE83C1AF1A8403CB53F53E486D8511DAD8A04887E5B23522CD470243453A299FA9E77237716103ABC11A1DF38855ED6F2EE187E9C582BA6")
+	fmt.Println(pubkey2cashaddr(bz))
 	if len(os.Args) != 6 {
 		fmt.Printf("Usage: %s <rpcURL> <username> <password> <startHeight> <endHeight>\n", os.Args[0])
 		return
@@ -48,23 +47,8 @@ func main() {
 	}
 
 	client := staking.NewRpcClient(rpcURL, rpcUsername, rpcPassword, "text/plain;")
-	PrintBalances(client, startH, endH)
-	//collectKeys(client, startH, endH)
-}
-
-func PrintBalances(client *staking.RpcClient, startHeight, endHeight int64) {
-	keeper, err := p2pkhdb.NewDBKeeper("dbk", ".")
-	if err != nil {
-		panic(err)
-	}
-	for h := int64(1); h < endHeight; h++ {
-		keeper.ProcessBlockAtHeight(client, h)
-	}
-	balanceChan := make(chan p2pkhdb.BalanceInfo, 100)
-	go keeper.Db.ScanEthAddrAndBalance(balanceChan)
-	for balanceInfo := range balanceChan {
-		fmt.Printf("%#v\n", balanceInfo)
-	}
+	collectKeys(client, startH, endH)
+	//client.PrintAllOpReturn(519995, 679995)
 }
 
 func collectKeys(client *staking.RpcClient, startHeight, endHeight int64) {
