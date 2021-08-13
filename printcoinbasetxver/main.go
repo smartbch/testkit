@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/tendermint/tendermint/libs/log"
 	"os"
+
+	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/smartbch/smartbch/staking"
 )
