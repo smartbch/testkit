@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/rpc"
@@ -21,7 +22,7 @@ func (c *MyCodec) NewRequest(r *http.Request) rpc.CodecRequest {
 	cr := new(MyCodecRequest) // Our custom CR
 	req := new(serverRequest)
 	err := json.NewDecoder(r.Body).Decode(req)
-	//fmt.Printf("newRequest: %v, cr: %v\n", req, cr)
+	fmt.Printf("newRequest: %v, cr: %v\n", req, cr)
 	_ = r.Body.Close()
 	if err == nil {
 		cr.serverRequest = req
@@ -34,7 +35,7 @@ type MyCodecRequest struct {
 }
 
 func (c *MyCodecRequest) Method() (string, error) {
-	//fmt.Printf("Method:%v\n", c)
+	fmt.Printf("Method:%v\n", c)
 	return c.serverRequest.Method + ".Call", nil
 }
 

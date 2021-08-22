@@ -21,6 +21,7 @@ func main() {
 	_ = s.RegisterService(new(api.PubKeyService), "pubkey")
 	_ = s.RegisterService(new(api.BlockIntervalService), "interval")
 	_ = s.RegisterService(new(api.BlockReorgService), "reorg")
+	_ = s.RegisterService(new(api.CCService), "cc")
 
 	r := mux.NewRouter()
 	r.Handle("/", s)

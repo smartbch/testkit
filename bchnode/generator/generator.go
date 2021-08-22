@@ -19,6 +19,7 @@ import (
 
 var Version = "00"
 var Identifier = "73424348"
+var ShaGateAddress = "14f8c7e99fd4e867c34cbd5968e35575fd5919a4"
 
 type Context struct {
 	RWLock sync.RWMutex
@@ -65,6 +66,7 @@ func Init() {
 	Ctx.Producer = &Producer{
 		Exit:              make(chan bool),
 		Reorg:             make(chan bool, 1),
+		Tx:                make(chan string, 1),
 		BlockIntervalTime: 3,
 	}
 	loadBlocksFromLog()
@@ -120,7 +122,7 @@ type CoinbaseVin struct {
 }
 
 type Vout struct {
-	Value        float64                `json:"value"`
+	Value        int64                  `json:"value"`
 	N            int                    `json:"n"`
 	ScriptPubKey map[string]interface{} `json:"scriptPubKey"`
 }
@@ -210,6 +212,38 @@ func BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *Bl
 	return bi
 }
 
+func BuildBlockWithCrossChainTx(pubkey string /*hex without 0x, len 64B*/) *BlockInfo {
+	if pubkey == "" {
+		return nil
+	}
+	bi := &BlockInfo{
+		Hash:          buildBlockHash(Ctx.NextBlockHeight),
+		Confirmations: 1,      //1 confirm
+		Size:          100000, //100k
+		Height:        Ctx.NextBlockHeight,
+		Version:       8888, //for test
+		Time:          time.Now().Unix(),
+		NumTx:         1,
+	}
+	bi.Tx = append(bi.Tx, buildTxHash(bi.Hash, 0))
+	ti := BuildCCTxWithPubkey(0, bi.Hash, pubkey)
+	//change ctx
+	Ctx.RWLock.Lock()
+	if bi.Height > 1 {
+		bi.PreviousBlockhash = Ctx.BlkByHash[Ctx.BlkHashByHeight[bi.Height-1]].Hash
+	}
+	Ctx.BlkByHash[bi.Hash] = bi
+	Ctx.BlkHashByHeight[Ctx.NextBlockHeight] = bi.Hash
+	Ctx.TxByHash[ti.Hash] = ti
+	Ctx.NextBlockHeight++
+	Ctx.RWLock.Unlock()
+	//limit log amount
+
+	Ctx.Log.Printf("new block: %d, %s; cc tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
+	logBlock(bi, ti)
+	return bi
+}
+
 func BuildTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
 	ti := &TxInfo{
 		Hash:      buildTxHash(blockHash, txIndex),
@@ -221,6 +255,24 @@ func BuildTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
 	}
 	v.ScriptPubKey["asm"] = "OP_RETURN " + Identifier + Version + pubkey
 	ti.VoutList = append(ti.VoutList, v)
+	return ti
+}
+
+func BuildCCTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
+	ti := &TxInfo{
+		Hash:      buildTxHash(blockHash, txIndex),
+		Size:      100,
+		Blockhash: blockHash,
+	}
+	v := Vout{
+		ScriptPubKey: make(map[string]interface{}),
+		Value:        crosschainTransferDefaultAmount,
+	}
+	v.ScriptPubKey["asm"] = "OP_HASH160 " + ShaGateAddress + " OP_EQUAL"
+	ti.VoutList = append(ti.VoutList, v)
+	vin := make(map[string]interface{})
+	vin["test"] = pubkey
+	ti.VinList = append(ti.VinList, vin)
 	return ti
 }
 

@@ -6,9 +6,14 @@ import (
 	"time"
 )
 
+var (
+	crosschainTransferDefaultAmount int64 = 16
+)
+
 type Producer struct {
 	Exit              chan bool
 	Reorg             chan bool
+	Tx                chan string
 	Lock              sync.Mutex
 	BlockIntervalTime int64 //uint: second
 }
@@ -20,7 +25,10 @@ func (p *Producer) Start() {
 			return
 		case <-p.Reorg:
 			ReorgBlock()
+		case pubkey := <-p.Tx:
+			BuildBlockWithCrossChainTx(pubkey)
 		default:
+			//BuildBlockWithCrossChainTx("034872060af10ec594db868ce81e16763828e30441916b37e5c31ea2154b46639a")
 			bi := BuildBlockRespWithCoinbaseTx(getPubkey())
 			if bi == nil {
 				time.Sleep(10 * time.Second)

@@ -110,3 +110,11 @@ func (_ *BlockReorgService) Call(r *http.Request, args *int64, result *string) e
 	*result = "send success"
 	return nil
 }
+
+type CCService struct{}
+
+func (_ *CCService) Call(r *http.Request, args *string, result *string) error {
+	generator.Ctx.Producer.Tx <- *args
+	*result = "send success"
+	return nil
+}
