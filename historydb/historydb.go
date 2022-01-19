@@ -116,14 +116,14 @@ func (db *HistoryDb) AddRwLists(height uint64, rwLists *types.ReadWriteLists) {
 	for _, op := range rwLists.AccountWList {
 		var key [1 + 20 + 8]byte
 		key[0] = AccountByte
-		if("0x0206422a8140C674203cB357D2807fC89ccC4B4C" == common.Address(op.Addr).String()) {
+		if "0x0206422a8140C674203cB357D2807fC89ccC4B4C" == common.Address(op.Addr).String() {
 			fmt.Printf("height %d 0206 %#v\n", height, op.Account)
 		}
 		copy(key[1:], op.Addr[:])
 		copy(key[1+20:], db.currHeight[:])
 		db.batch.Set(key[:], op.Account)
 		if len(op.Account) == 0 {
-		//delete contract account (EOA cannot be deleted)
+			//delete contract account (EOA cannot be deleted)
 			key[0] = BytecodeByte
 			db.batch.Set(key[:], op.Account)
 		}
@@ -174,7 +174,7 @@ func (db *HistoryDb) AddRwListAtHeight(ctx *types.Context, height uint64) {
 
 func (db *HistoryDb) Fill(ctx *types.Context, endHeight uint64) {
 	for h := uint64(1); h < endHeight; h++ {
-		if h % 10000 == 0 {
+		if h%10000 == 0 {
 			fmt.Printf("Height %d\n", h)
 		}
 		db.AddRwListAtHeight(ctx, h)
@@ -282,7 +282,7 @@ func runAccountTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height u
 
 	nonce, err := ethCli.NonceAt(ctx, common.Address(rec.Addr), h)
 	balance, err := ethCli.BalanceAt(ctx, common.Address(rec.Addr), h)
-	if len(rec.Value) == 0 && nonce == 0 && balance.IsInt64() && balance.Int64() == 0 {//deleted contract account
+	if len(rec.Value) == 0 && nonce == 0 && balance.IsInt64() && balance.Int64() == 0 { //deleted contract account
 		return
 	}
 	//fmt.Printf("Here %#v %d\n", rec.Addr, len(rec.Value))
@@ -293,11 +293,11 @@ func runAccountTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height u
 	if accInfo.Nonce() != nonce {
 		fmt.Printf("height %d acc %s\n", height, common.Address(rec.Addr))
 		fmt.Printf("nonce ref %d imp %d\n", accInfo.Nonce(), nonce)
-		h = big.NewInt(int64(height-1))
+		h = big.NewInt(int64(height - 1))
 		nonce, _ = ethCli.NonceAt(ctx, common.Address(rec.Addr), h)
 		fmt.Printf("nonce imp+h-1 %d\n", nonce)
 
-		h = big.NewInt(int64(height+1))
+		h = big.NewInt(int64(height + 1))
 		nonce, _ = ethCli.NonceAt(ctx, common.Address(rec.Addr), h)
 		fmt.Printf("nonce imp+h+1 %d\n", nonce)
 	} else {

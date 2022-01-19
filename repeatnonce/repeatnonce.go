@@ -95,7 +95,7 @@ func repeatNonce(repeatCount int64, nonceStart, nonceEnd uint64, toAddrList []co
 	}
 	defer c.Close()
 	for nonce := nonceStart; nonce < nonceEnd; nonce++ {
-		time.Sleep(time.Duration(delayTime) * time.Millisecond))
+		time.Sleep(time.Duration(delayTime) * time.Millisecond)
 		fmt.Printf("=============== nonce %d begin ==============\n", nonce)
 		for i := int64(1); i <= repeatCount; i++ {
 			for j, toAddr := range toAddrList {
