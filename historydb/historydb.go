@@ -1,24 +1,27 @@
-package historydb
+package main
 
 import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
 	"math/rand"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/tendermint/tendermint/libs/log"
+
 	it "github.com/smartbch/moeingads/indextree"
 	adstypes "github.com/smartbch/moeingads/types"
 	"github.com/smartbch/moeingdb/modb"
-	"github.com/tendermint/tendermint/libs/log"
-
 	"github.com/smartbch/moeingevm/types"
+	sbchrpc "github.com/smartbch/smartbch/rpc/api"
 )
 
 const (
@@ -423,7 +426,7 @@ func runStorageTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height, 
 func testTheOnlyTxInBlocks(modbDir, rpcUrl string, endHeight uint64) {
 	modb := modb.NewMoDB(modbDir, log.NewNopLogger())
 	ctx := types.NewContext(nil, modb)
-	ethCli := getEthClient(rpcUrl)
+	sbchCli := newSbchClient(rpcUrl)
 	for h := uint64(0); h < endHeight; h++ {
 		blk, err := ctx.GetBlockByHeight(h)
 		if err != nil {
@@ -437,10 +440,53 @@ func testTheOnlyTxInBlocks(modbDir, rpcUrl string, endHeight uint64) {
 		if err != nil {
 			panic(err)
 		}
-		testTheOnlyTx(tx, ethCli)
+		testTheOnlyTx(tx, sbchCli, h)
 	}
 }
 
-func testTheOnlyTx(tx *types.Transaction, ethCli *ethclient.Client) {
+func testTheOnlyTx(tx *types.Transaction, sbchCli *SbchClient, height uint64) {
 	// TODO: check sbch_call using tx.RwLists
+	to := common.Address(tx.To)
+	toPtr := &to
+	if to == [20]byte{} {
+		toPtr = nil
+	}
+
+	h := big.NewInt(int64(height))
+	callMsg := ethereum.CallMsg{
+		From:     tx.From,
+		To:       toPtr,
+		Gas:      tx.Gas,
+		GasPrice: big.NewInt(0).SetBytes(tx.GasPrice[:]),
+		Value:    big.NewInt(0).SetBytes(tx.Value[:]),
+		Data:     tx.Input,
+	}
+
+	callDetail, err := sbchCli.sbchCall(callMsg, h)
+	if err != nil {
+		panic(err)
+	}
+
+	compareCallDetail(tx, callDetail)
+}
+
+func compareCallDetail(tx *types.Transaction, callDetail *sbchrpc.CallDetail) {
+	rwListsJson1, err := json.Marshal(tx.RwLists)
+	if err != nil {
+		panic(err)
+	}
+
+	rwListsJson2, err := json.Marshal(callDetail.RwLists)
+	if err != nil {
+		panic(err)
+	}
+
+	if !bytes.Equal(rwListsJson1, rwListsJson2) {
+		fmt.Println("----- rwListsJson1 -----")
+		fmt.Println(string(rwListsJson1))
+		fmt.Println("----- rwListsJson2 -----")
+		fmt.Println(string(rwListsJson2))
+
+		panic("rwLists not match!")
+	}
 }

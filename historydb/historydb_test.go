@@ -1,4 +1,4 @@
-package historydb
+package main
 
 import (
 	"context"
