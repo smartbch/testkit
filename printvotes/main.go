@@ -7,7 +7,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/smartbch/smartbch/staking"
+	"github.com/smartbch/smartbch/watcher"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	username := os.Args[2]
 	password := os.Args[3]
 
-	client := staking.NewRpcClient(rpcURL, username, password, "text/plain;",
+	client := watcher.NewRpcClient(rpcURL, username, password, "text/plain;",
 		log.NewNopLogger())
 	h := client.GetLatestHeight()
 	fmt.Println("latest height:", h)
@@ -38,7 +38,7 @@ func main() {
 			continue
 		}
 
-		cbTx, err := client.GetTxInfo(bInfo.Tx[0])
+		cbTx, err := client.GetTxInfo(bInfo.Tx[0].Hash, bHash)
 		if err != nil {
 			fmt.Println(err.Error())
 			continue
