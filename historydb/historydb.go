@@ -26,6 +26,7 @@ const (
 	AccountByte         = byte(102)
 	BytecodeByte        = byte(104)
 	StorageByte         = byte(106)
+	DelHeightByte       = byte(108)
 
 	Timeout = time.Second * 15
 )
@@ -116,16 +117,20 @@ func (db *HistoryDb) AddRwLists(height uint64, rwLists *types.ReadWriteLists) {
 	for _, op := range rwLists.AccountWList {
 		var key [1 + 20 + 8]byte
 		key[0] = AccountByte
-		if "0x0206422a8140C674203cB357D2807fC89ccC4B4C" == common.Address(op.Addr).String() {
-			fmt.Printf("height %d 0206 %#v\n", height, op.Account)
-		}
+		//focus := common.Address(op.Addr).String()
+		//if("0x5D0171c4AB2745412B148aF5C803C62605b19cD6" == focus ||
+		//	"0x42A02Ab30C79247D96689C3776aA2faCC1F19dc3" == focus ) {
+		//	fmt.Printf("focus %s height %d value %#v\n", focus, height, op.Account)
+		//}
 		copy(key[1:], op.Addr[:])
 		copy(key[1+20:], db.currHeight[:])
 		db.batch.Set(key[:], op.Account)
 		if len(op.Account) == 0 {
 			//delete contract account (EOA cannot be deleted)
-			key[0] = BytecodeByte
+			key[0] = BytecodeByte // bytecode is also deleted
 			db.batch.Set(key[:], op.Account)
+			key[0] = DelHeightByte //record the deletion height
+			db.batch.Set(key[:1+20], db.currHeight[:])
 		}
 	}
 	for _, op := range rwLists.BytecodeWList {
@@ -205,18 +210,19 @@ func getRecord(key, value []byte) (rec HistoricalRecord) {
 }
 
 func (db *HistoryDb) GenerateRecords(recChan chan HistoricalRecord, latestHeight uint64) {
-	iter := db.rocksdb.Iterator([]byte{AccountByte}, []byte{StorageByte + 1})
+	//iter := db.rocksdb.Iterator([]byte{AccountByte}, []byte{AccountByte + 1})
+	//iter := db.rocksdb.Iterator([]byte{BytecodeByte}, []byte{BytecodeByte + 1})
+	iter := db.rocksdb.Iterator([]byte{StorageByte}, []byte{StorageByte + 1})
 	defer iter.Close()
 	if !iter.Valid() {
 		return
 	}
 	currRec := getRecord(iter.Key(), iter.Value())
-	for iter.Valid() {
-		iter.Next()
-		currRec.EndHeight = latestHeight
+	currRec.EndHeight = latestHeight
+	for iter.Next(); iter.Valid(); iter.Next() {
 		key, value := iter.Key(), iter.Value()
 		if (currRec.Key == "account" && key[0] == AccountByte) ||
-			(currRec.Key == "bytecode" && key[0] == StorageByte) {
+			(currRec.Key == "bytecode" && key[0] == BytecodeByte) {
 			if bytes.Equal(currRec.Addr[:], key[1:1+20]) {
 				currRec.EndHeight = binary.BigEndian.Uint64(key[1+20:])
 			}
@@ -224,11 +230,18 @@ func (db *HistoryDb) GenerateRecords(recChan chan HistoricalRecord, latestHeight
 			if bytes.Equal(currRec.Addr[:], key[1:1+20]) && currRec.Key == string(key[1+20:1+20+32]) {
 				currRec.EndHeight = binary.BigEndian.Uint64(key[1+20+32:])
 			}
+			heightBz := db.rocksdb.Get(append([]byte{DelHeightByte}, currRec.Addr[:]...))
+			if len(heightBz) != 0 {
+				currRec.EndHeight = binary.BigEndian.Uint64(heightBz)
+				fmt.Printf("Debug: %s DelHeight %d\n", common.Address(currRec.Addr), currRec.EndHeight)
+			}
 		}
 		recChan <- currRec
 		currRec = getRecord(key, value)
+		currRec.EndHeight = latestHeight
 	}
 	recChan <- currRec
+	close(recChan)
 }
 
 // -------------------------------------------------------------------------------
@@ -254,35 +267,80 @@ func runTestcases(hisdbDir, rpcUrl string, latestHeight uint64) {
 	recChan := make(chan HistoricalRecord, 100)
 	hisDb := NewHisDb(hisdbDir)
 	go hisDb.GenerateRecords(recChan, latestHeight)
+	count := 0
 	for rec := range recChan {
-		fmt.Printf("StartEnd %d %d\n", rec.StartHeight, rec.EndHeight)
+		if count%100000 == 0 {
+			fmt.Printf("========== %d ============\n", count)
+		}
+		if rec.EndHeight == rec.StartHeight {
+			continue
+		}
+		if int(rec.EndHeight) <= int(rec.StartHeight) {
+			fmt.Printf("StartEnd %d %d\n", rec.StartHeight, rec.EndHeight)
+		}
 		mid := rand.Intn(int(rec.EndHeight)-int(rec.StartHeight)) + int(rec.StartHeight)
 		if rec.Key == "account" {
-			runAccountTestcase(rec, ethCli, rec.StartHeight)
-			//runAccountTestcase(rec, ethCli, uint64(mid))
-			//runAccountTestcase(rec, ethCli, rec.EndHeight-1)
+			runNonceTestcase(rec, ethCli, rec.StartHeight, rec.StartHeight, rec.EndHeight)
+			if rec.StartHeight+1 < rec.EndHeight {
+				//We are not aware of balance-change caused by Prepare
+				//So rec.StartHeight+1 == rec.EndHeight cannot be tested
+				runAccountTestcase(rec, ethCli, rec.StartHeight, rec.StartHeight, rec.EndHeight)
+			}
+			if rec.StartHeight+4 <= rec.EndHeight { // must avoid rec.EndHeight-1
+				mid = rand.Intn(int(rec.EndHeight)-int(rec.StartHeight)-3) + int(rec.StartHeight) + 1
+				runNonceTestcase(rec, ethCli, uint64(mid), rec.StartHeight, rec.EndHeight)
+				runAccountTestcase(rec, ethCli, uint64(mid), rec.StartHeight, rec.EndHeight)
+			}
+			runNonceTestcase(rec, ethCli, rec.EndHeight-1, rec.StartHeight, rec.EndHeight)
+			//We are not aware of balance-change caused by Prepare
+			//So balance at EndHeight cannot be tested
 		} else if rec.Key == "bytecode" {
-			runBytecodeTestcase(rec, ethCli, rec.StartHeight)
-			runBytecodeTestcase(rec, ethCli, uint64(mid))
-			runBytecodeTestcase(rec, ethCli, rec.EndHeight-1)
+			runBytecodeTestcase(rec, ethCli, rec.StartHeight, rec.StartHeight, rec.EndHeight)
+			runBytecodeTestcase(rec, ethCli, uint64(mid), rec.StartHeight, rec.EndHeight)
+			runBytecodeTestcase(rec, ethCli, rec.EndHeight-1, rec.StartHeight, rec.EndHeight)
 		} else if len(rec.Key) == 32 {
-			runStorageTestcase(rec, ethCli, rec.StartHeight)
-			runStorageTestcase(rec, ethCli, uint64(mid))
-			runStorageTestcase(rec, ethCli, rec.EndHeight-1)
+			runStorageTestcase(rec, ethCli, rec.StartHeight, rec.StartHeight, rec.EndHeight)
+			runStorageTestcase(rec, ethCli, uint64(mid), rec.StartHeight, rec.EndHeight)
+			runStorageTestcase(rec, ethCli, rec.EndHeight-1, rec.StartHeight, rec.EndHeight)
 		} else {
 			panic("Invalid rec.Key")
 		}
+		count++
 	}
 }
 
-func runAccountTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height uint64) {
+func runAccountTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height, s, e uint64) {
+	h := big.NewInt(int64(height))
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+
+	balance, err := ethCli.BalanceAt(ctx, common.Address(rec.Addr), h)
+	if len(rec.Value) == 0 && balance.IsInt64() && balance.Int64() == 0 { //deleted contract account
+		return
+	}
+	//fmt.Printf("Here %#v %d\n", rec.Addr, len(rec.Value))
+	accInfo := types.NewAccountInfo(rec.Value)
+	if err != nil {
+		panic(err)
+	}
+	if accInfo.Balance().ToBig().Cmp(balance) != 0 {
+		fmt.Printf("SE %d %d\n", s, e)
+		fmt.Printf("account %d acc %s\n", height, common.Address(rec.Addr))
+		fmt.Printf("balance ref %s imp %s\n", accInfo.Balance(), balance)
+		balance, err = ethCli.BalanceAt(ctx, common.Address(rec.Addr), nil)
+		fmt.Printf("balance+latest imp %s\n", balance)
+		h := big.NewInt(int64(height + 1))
+		balance, err = ethCli.BalanceAt(ctx, common.Address(rec.Addr), h)
+		fmt.Printf("BALANCE+1 imp %s\n", balance)
+	}
+}
+func runNonceTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height, s, e uint64) {
 	h := big.NewInt(int64(height))
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
 	nonce, err := ethCli.NonceAt(ctx, common.Address(rec.Addr), h)
-	balance, err := ethCli.BalanceAt(ctx, common.Address(rec.Addr), h)
-	if len(rec.Value) == 0 && nonce == 0 && balance.IsInt64() && balance.Int64() == 0 { //deleted contract account
+	if len(rec.Value) == 0 && nonce == 0 { //deleted contract account
 		return
 	}
 	//fmt.Printf("Here %#v %d\n", rec.Addr, len(rec.Value))
@@ -291,6 +349,7 @@ func runAccountTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height u
 		panic(err)
 	}
 	if accInfo.Nonce() != nonce {
+		fmt.Printf("SE %d %d\n", s, e)
 		fmt.Printf("height %d acc %s\n", height, common.Address(rec.Addr))
 		fmt.Printf("nonce ref %d imp %d\n", accInfo.Nonce(), nonce)
 		h = big.NewInt(int64(height - 1))
@@ -301,30 +360,26 @@ func runAccountTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height u
 		nonce, _ = ethCli.NonceAt(ctx, common.Address(rec.Addr), h)
 		fmt.Printf("nonce imp+h+1 %d\n", nonce)
 	} else {
-		fmt.Printf("nonce SAME! h %d nonce %d %s\n", height, nonce, common.Address(rec.Addr))
+		if "0x498F4F6cb582B9839e3dA48E18734286FBFFa7e0" == common.Address(rec.Addr).String() ||
+			"0x79f3F9F9c0E860341e5A20C6801Ad28fb1FBD924" == common.Address(rec.Addr).String() {
+			fmt.Printf("nonce SAME! h %d nonce %d %s\n", height, nonce, common.Address(rec.Addr))
+		}
 	}
-	//balance, err := ethCli.BalanceAt(ctx, common.Address(rec.Addr), h)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//if accInfo.Balance().ToBig().Cmp(balance) != 0 {
-	//	fmt.Printf("account %d acc %s\n", height, common.Address(rec.Addr))
-	//	fmt.Printf("balance ref %s imp %s\n", accInfo.Balance(), balance)
-	//	balance, err = ethCli.BalanceAt(ctx, common.Address(rec.Addr), nil)
-	//	fmt.Printf("balance+latest imp %s\n", balance)
-	//	h := big.NewInt(int64(height+1))
-	//	balance, err = ethCli.BalanceAt(ctx, common.Address(rec.Addr), h)
-	//	fmt.Printf("BALANCE+1 imp %s\n", balance)
-	//}
 }
 
-func runBytecodeTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height uint64) {
+func runBytecodeTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height, s, e uint64) {
 	h := big.NewInt(int64(height))
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
+	//focus := common.Address(rec.Addr).String()
+	//if("0x5D0171c4AB2745412B148aF5C803C62605b19cD6" == focus ||
+	//	"0x42A02Ab30C79247D96689C3776aA2faCC1F19dc3" == focus ) {
+	//	fmt.Printf("SE %d %d\n", s, e)
+	//	fmt.Printf("Focus height %d acc %s value %#v\n", height, common.Address(rec.Addr), rec.Value)
+	//}
 	bytecode, err := ethCli.CodeAt(ctx, common.Address(rec.Addr), h)
-	if len(rec.Value) == 0 && err != nil { //deleted contract code
+	if len(rec.Value) == 0 && len(bytecode) == 0 { //deleted contract code
 		return
 	}
 	if err != nil {
@@ -332,13 +387,17 @@ func runBytecodeTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height 
 	}
 	bcInfo := types.NewBytecodeInfo(rec.Value)
 	if !bytes.Equal(bcInfo.BytecodeSlice(), bytecode) {
+		fmt.Printf("SE %d %d\n", s, e)
 		fmt.Printf("bytecode %d acc %s\n", height, common.Address(rec.Addr))
 		fmt.Printf("ref %#v\n", bcInfo.BytecodeSlice())
 		fmt.Printf("imp %#v\n", bytecode)
 	}
 }
 
-func runStorageTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height uint64) {
+func runStorageTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height, s, e uint64) {
+	if rec.Addr == [20]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x27, 0x10} { // The storage of staking contract cannot be correctly tested
+		return
+	}
 	h := big.NewInt(int64(height))
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
@@ -346,13 +405,15 @@ func runStorageTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height u
 	var key common.Hash
 	copy(key[:], rec.Key)
 	value, err := ethCli.StorageAt(ctx, common.Address(rec.Addr), key, h)
-	if len(rec.Value) == 0 && err != nil { //deleted stoarge
+	var zero32 [32]byte
+	if len(rec.Value) == 0 && bytes.Equal(value, zero32[:]) { //deleted stoarge
 		return
 	}
 	if err != nil {
 		panic(err)
 	}
 	if !bytes.Equal(rec.Value, value) {
+		fmt.Printf("SE %d %d\n", s, e)
 		fmt.Printf("storage %d acc %s\n", height, common.Address(rec.Addr))
 		fmt.Printf("ref %#v\n", rec.Value)
 		fmt.Printf("imp %#v\n", value)
