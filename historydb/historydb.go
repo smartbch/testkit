@@ -441,11 +441,12 @@ func testTheOnlyTxInBlocks(modbDir, rpcUrl string, endHeight uint64) {
 	modb := modb.NewMoDB(modbDir, log.NewNopLogger())
 	ctx := types.NewContext(nil, modb)
 	sbchCli := newSbchClient(rpcUrl)
-	for h := uint64(0); h < endHeight; h++ {
+	for h := uint64(1); h < endHeight; h++ {
 		blk, err := ctx.GetBlockByHeight(h)
 		if err != nil {
 			panic(err)
 		}
+		fmt.Println("block:", h, "txs:", len(blk.Transactions))
 		if len(blk.Transactions) != 1 {
 			continue
 		}
@@ -485,22 +486,24 @@ func testTheOnlyTx(tx *types.Transaction, sbchCli *SbchClient, height uint64) {
 }
 
 func compareCallDetail(tx *types.Transaction, callDetail *sbchrpc.CallDetail) {
-	rwListsJson1, err := json.Marshal(tx.RwLists)
+	callDetail1 := sbchrpc.TxToRpcCallDetail(tx)
+
+	json1, err := json.Marshal(callDetail1)
 	if err != nil {
 		panic(err)
 	}
 
-	rwListsJson2, err := json.Marshal(callDetail.RwLists)
+	json2, err := json.Marshal(callDetail)
 	if err != nil {
 		panic(err)
 	}
 
-	if !bytes.Equal(rwListsJson1, rwListsJson2) {
-		fmt.Println("----- rwListsJson1 -----")
-		fmt.Println(string(rwListsJson1))
-		fmt.Println("----- rwListsJson2 -----")
-		fmt.Println(string(rwListsJson2))
+	if !bytes.Equal(json1, json2) {
+		fmt.Println("----- json1 -----")
+		fmt.Println(string(json1))
+		fmt.Println("----- json2 -----")
+		fmt.Println(string(json2))
 
-		panic("rwLists not match!")
+		panic("callDetail not match!")
 	}
 }
