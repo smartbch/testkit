@@ -154,6 +154,11 @@ func (db *HistoryDb) AddRwLists(height uint64, rwLists *types.ReadWriteLists) {
 		if len(op.Key) != 32 {
 			panic("Invalid Key Length")
 		}
+		//focus := common.Address(addr).String()
+		//if("0x5D0171c4AB2745412B148aF5C803C62605b19cD6" == focus ||
+		//	"0x42A02Ab30C79247D96689C3776aA2faCC1F19dc3" == focus ) {
+		//	fmt.Printf("FOCUS %s height %d key %#v value %#v\n", focus, height, op.Key, op.Value)
+		//}
 		copy(key[1+20:], op.Key)
 		copy(key[1+20+32:], db.currHeight[:])
 		db.batch.Set(key[:], op.Value)
@@ -213,11 +218,13 @@ func getRecord(key, value []byte) (rec HistoricalRecord) {
 }
 
 func (db *HistoryDb) GenerateRecords(recChan chan HistoricalRecord, latestHeight uint64) {
+	iter := db.rocksdb.Iterator([]byte{AccountByte}, []byte{StorageByte + 1})
 	//iter := db.rocksdb.Iterator([]byte{AccountByte}, []byte{AccountByte + 1})
 	//iter := db.rocksdb.Iterator([]byte{BytecodeByte}, []byte{BytecodeByte + 1})
-	iter := db.rocksdb.Iterator([]byte{StorageByte}, []byte{StorageByte + 1})
+	//iter := db.rocksdb.Iterator([]byte{StorageByte, 0x42, 0xA0}, []byte{StorageByte + 1})
 	defer iter.Close()
 	if !iter.Valid() {
+		close(recChan)
 		return
 	}
 	currRec := getRecord(iter.Key(), iter.Value())
@@ -232,11 +239,11 @@ func (db *HistoryDb) GenerateRecords(recChan chan HistoricalRecord, latestHeight
 		} else if len(currRec.Key) == 32 && key[0] == StorageByte {
 			if bytes.Equal(currRec.Addr[:], key[1:1+20]) && currRec.Key == string(key[1+20:1+20+32]) {
 				currRec.EndHeight = binary.BigEndian.Uint64(key[1+20+32:])
-			}
-			heightBz := db.rocksdb.Get(append([]byte{DelHeightByte}, currRec.Addr[:]...))
-			if len(heightBz) != 0 {
-				currRec.EndHeight = binary.BigEndian.Uint64(heightBz)
-				fmt.Printf("Debug: %s DelHeight %d\n", common.Address(currRec.Addr), currRec.EndHeight)
+			} else {
+				heightBz := db.rocksdb.Get(append([]byte{DelHeightByte}, currRec.Addr[:]...))
+				if len(heightBz) != 0 {
+					currRec.EndHeight = binary.BigEndian.Uint64(heightBz)
+				}
 			}
 		}
 		recChan <- currRec
@@ -405,6 +412,13 @@ func runStorageTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height, 
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
+	//focus := common.Address(rec.Addr).String()
+	//if("0x5D0171c4AB2745412B148aF5C803C62605b19cD6" == focus ||
+	//	"0x42A02Ab30C79247D96689C3776aA2faCC1F19dc3" == focus ) {
+	//	fmt.Printf("SE %d %d\n", s, e)
+	//	fmt.Printf("Focus height %d acc %s key %#v value %#v\n", height, common.Address(rec.Addr), rec.Key, rec.Value)
+	//}
+
 	var key common.Hash
 	copy(key[:], rec.Key)
 	value, err := ethCli.StorageAt(ctx, common.Address(rec.Addr), key, h)
@@ -417,7 +431,7 @@ func runStorageTestcase(rec HistoricalRecord, ethCli *ethclient.Client, height, 
 	}
 	if !bytes.Equal(rec.Value, value) {
 		fmt.Printf("SE %d %d\n", s, e)
-		fmt.Printf("storage %d acc %s\n", height, common.Address(rec.Addr))
+		fmt.Printf("storage %d acc %s %#v\n", height, common.Address(rec.Addr), rec.Key)
 		fmt.Printf("ref %#v\n", rec.Value)
 		fmt.Printf("imp %#v\n", value)
 	}
