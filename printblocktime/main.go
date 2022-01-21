@@ -22,11 +22,11 @@ func main() {
 
 	client := watcher.NewRpcClient(rpcURL, username, password, "text/plain;",
 		log.NewNopLogger())
-	h := client.GetLatestHeight()
+	h := client.GetLatestHeight(false)
 	fmt.Println("latest height:", h)
 
 	for ; h > 0; h-- {
-		b := client.GetBlockByHeight(h)
+		b := client.GetBlockByHeight(h, false)
 		fmt.Println("block:", h, "time:", time.Unix(b.Timestamp, 0).String())
 	}
 }
