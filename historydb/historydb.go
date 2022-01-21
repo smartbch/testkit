@@ -460,14 +460,13 @@ func testTheOnlyTxInBlocks(modbDir, rpcUrl string, endHeight uint64) {
 }
 
 func testTheOnlyTx(tx *types.Transaction, sbchCli *SbchClient, height uint64) {
-	// TODO: check sbch_call using tx.RwLists
 	to := common.Address(tx.To)
 	toPtr := &to
 	if to == [20]byte{} {
 		toPtr = nil
 	}
 
-	h := big.NewInt(int64(height))
+	h := big.NewInt(int64(height - 1))
 	callMsg := ethereum.CallMsg{
 		From:     tx.From,
 		To:       toPtr,
