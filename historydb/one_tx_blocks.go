@@ -40,8 +40,12 @@ func (db *OneTxDb) addTx(height uint64, tx *moevmtypes.Transaction) {
 	db.rocksdb.Set(key, val)
 }
 
-func (db *OneTxDb) getAllTxs(cb func(height uint64, tx *moevmtypes.Transaction)) {
-	iter := db.rocksdb.Iterator([]byte{0}, []byte{255})
+func (db *OneTxDb) getAllTxs(startHeight uint64, cb func(height uint64, tx *moevmtypes.Transaction)) {
+	end := []byte{255, 255, 255, 255, 255, 255, 255, 255}
+	start := make([]byte, 8)
+	binary.BigEndian.PutUint64(start, startHeight)
+
+	iter := db.rocksdb.Iterator(start, end)
 	defer iter.Close()
 
 	for ; iter.Valid(); iter.Next() {
@@ -67,7 +71,7 @@ func generateOneTxDb(modbDir, oneTxDbDir string, endHeight uint64) {
 	fmt.Println("oneTx count:", n)
 }
 
-func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, endHeight uint64) {
+func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, startHeight uint64) {
 	sbchCli := newSbchClient(rpcUrl)
 	oneTxDb := newOneTxDb(oneTxDbDir)
 
@@ -75,7 +79,7 @@ func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, endHeight uint64) {
 		fmt.Println("height:", height, "tx:", hex.EncodeToString(tx.Hash[:]))
 		testTheOnlyTx(tx, sbchCli, height)
 	}
-	oneTxDb.getAllTxs(cb)
+	oneTxDb.getAllTxs(startHeight, cb)
 }
 
 func testTheOnlyTxInBlocks(modbDir, rpcUrl string, endHeight uint64) {
@@ -134,25 +138,25 @@ func testTheOnlyTx(tx *moevmtypes.Transaction, sbchCli *SbchClient, height uint6
 	compareCallDetail(tx, callDetail)
 }
 
-func compareCallDetail(tx *moevmtypes.Transaction, callDetail *sbchrpc.CallDetail) {
-	callDetail1 := sbchrpc.TxToRpcCallDetail(tx)
+func compareCallDetail(tx *moevmtypes.Transaction, rpcCallDetail *sbchrpc.CallDetail) {
+	txCallDetail := sbchrpc.TxToRpcCallDetail(tx)
 
-	json1, err := json.Marshal(callDetail1)
+	json1, err := json.Marshal(txCallDetail)
 	if err != nil {
 		panic(err)
 	}
 
-	json2, err := json.Marshal(callDetail)
+	json2, err := json.Marshal(rpcCallDetail)
 	if err != nil {
 		panic(err)
 	}
 
 	if !bytes.Equal(json1, json2) {
-		fmt.Println("----- json1 -----")
+		fmt.Println("----- txCallDetail  -----")
 		fmt.Println(string(json1))
-		fmt.Println("----- json2 -----")
+		fmt.Println("----- rpcCallDetail -----")
 		fmt.Println(string(json2))
 
-		panic("callDetail not match!")
+		panic("callDetails not match!")
 	}
 }
