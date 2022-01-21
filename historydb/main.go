@@ -8,13 +8,13 @@ import (
 
 const usage = `Usage:
   historydb generateOneTxDb <modbDir> <oneTxDbDir> <endHeight>
-  historydb testTxsInOneTxDb <modbDir> <rpcUrl> <endHeight>
+  historydb testTxsInOneTxDb <modbDir> <rpcUrl> <endHeight> <stopOnErr>
   historydb testTheOnlyTxInBlocks <oneTxDbDir> <rpcUrl> <endHeight>
   historydb generateHisDb <modbDir> <hisdbDir> <endHeight>
   historydb runTestcases <hisdbDir> <rpcUrl> <latestHeight>`
 
 func main() {
-	if len(os.Args) != 5 {
+	if len(os.Args) < 5 {
 		fmt.Println(usage)
 		return
 	}
@@ -23,7 +23,7 @@ func main() {
 	case "generateOneTxDb":
 		generateOneTxDb(os.Args[2], os.Args[3], parseUint64(os.Args[4]))
 	case "testTxsInOneTxDb":
-		testTxsInOneTxDb(os.Args[2], os.Args[3], parseUint64(os.Args[4]))
+		testTxsInOneTxDb(os.Args[2], os.Args[3], parseUint64(os.Args[4]), len(os.Args) == 5 || os.Args[5] != "false")
 	case "testTheOnlyTxInBlocks":
 		testTheOnlyTxInBlocks(os.Args[2], os.Args[3], parseUint64(os.Args[4]))
 	case "generateHisDb":

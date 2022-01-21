@@ -71,13 +71,20 @@ func generateOneTxDb(modbDir, oneTxDbDir string, endHeight uint64) {
 	fmt.Println("oneTx count:", n)
 }
 
-func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, startHeight uint64) {
+func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, startHeight uint64, stopOnErr bool) {
 	sbchCli := newSbchClient(rpcUrl)
 	oneTxDb := newOneTxDb(oneTxDbDir)
 
 	cb := func(height uint64, tx *moevmtypes.Transaction) {
-		fmt.Println("height:", height, "tx:", hex.EncodeToString(tx.Hash[:]))
-		testTheOnlyTx(tx, sbchCli, height)
+		fmt.Print("height: ", height, " tx: 0x", hex.EncodeToString(tx.Hash[:]))
+		if testTheOnlyTx(tx, sbchCli, height, stopOnErr) {
+			fmt.Println(" OK")
+		} else {
+			fmt.Println(" FAIL")
+			if stopOnErr {
+				panic("callDetails not match!")
+			}
+		}
 	}
 	oneTxDb.getAllTxs(startHeight, cb)
 }
@@ -85,7 +92,9 @@ func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, startHeight uint64) {
 func testTheOnlyTxInBlocks(modbDir, rpcUrl string, endHeight uint64) {
 	sbchCli := newSbchClient(rpcUrl)
 	cb := func(height uint64, tx *moevmtypes.Transaction) {
-		testTheOnlyTx(tx, sbchCli, height)
+		if !testTheOnlyTx(tx, sbchCli, height, true) {
+			panic("callDetails not match!")
+		}
 	}
 	scanTheOnlyTxInBlocks(modbDir, endHeight, cb)
 }
@@ -113,7 +122,7 @@ func scanTheOnlyTxInBlocks(modbDir string, endHeight uint64, cb func(height uint
 	}
 }
 
-func testTheOnlyTx(tx *moevmtypes.Transaction, sbchCli *SbchClient, height uint64) {
+func testTheOnlyTx(tx *moevmtypes.Transaction, sbchCli *SbchClient, height uint64, printsDetail bool) bool {
 	to := common.Address(tx.To)
 	toPtr := &to
 	if to == [20]byte{} {
@@ -135,10 +144,10 @@ func testTheOnlyTx(tx *moevmtypes.Transaction, sbchCli *SbchClient, height uint6
 		panic(err)
 	}
 
-	compareCallDetail(tx, callDetail)
+	return compareCallDetail(tx, callDetail, printsDetail)
 }
 
-func compareCallDetail(tx *moevmtypes.Transaction, rpcCallDetail *sbchrpc.CallDetail) {
+func compareCallDetail(tx *moevmtypes.Transaction, rpcCallDetail *sbchrpc.CallDetail, printsDetail bool) bool {
 	txCallDetail := sbchrpc.TxToRpcCallDetail(tx)
 
 	json1, err := json.Marshal(txCallDetail)
@@ -151,12 +160,15 @@ func compareCallDetail(tx *moevmtypes.Transaction, rpcCallDetail *sbchrpc.CallDe
 		panic(err)
 	}
 
-	if !bytes.Equal(json1, json2) {
+	if bytes.Equal(json1, json2) {
+		return true
+	}
+
+	if printsDetail {
 		fmt.Println("----- txCallDetail  -----")
 		fmt.Println(string(json1))
 		fmt.Println("----- rpcCallDetail -----")
 		fmt.Println(string(json2))
-
-		panic("callDetails not match!")
 	}
+	return false
 }
