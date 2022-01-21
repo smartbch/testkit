@@ -76,6 +76,10 @@ func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, startHeight uint64, stopOnErr b
 	oneTxDb := newOneTxDb(oneTxDbDir)
 
 	cb := func(height uint64, tx *moevmtypes.Transaction) {
+		// if len(tx.Input) == 0 { // skip ether transfers
+		// 	return
+		// }
+
 		fmt.Print("height: ", height, " tx: 0x", hex.EncodeToString(tx.Hash[:]))
 		if testTheOnlyTx(tx, sbchCli, height, stopOnErr) {
 			fmt.Println(" OK")
@@ -165,9 +169,9 @@ func compareCallDetail(tx *moevmtypes.Transaction, rpcCallDetail *sbchrpc.CallDe
 	}
 
 	if printsDetail {
-		fmt.Println("----- txCallDetail  -----")
+		fmt.Println("\n----- txCallDetail  -----")
 		fmt.Println(string(json1))
-		fmt.Println("----- rpcCallDetail -----")
+		fmt.Println("\n----- rpcCallDetail -----")
 		fmt.Println(string(json2))
 	}
 	return false
