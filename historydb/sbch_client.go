@@ -30,6 +30,13 @@ func newSbchClient(url string) *SbchClient {
 	}
 }
 
+func (cli *SbchClient) ethCall(msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+
+	return cli.ethCli.CallContract(ctx, msg, blockNumber)
+}
+
 func (cli *SbchClient) sbchCall(msg ethereum.CallMsg, blockNumber *big.Int) (*sbchrpc.CallDetail, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()

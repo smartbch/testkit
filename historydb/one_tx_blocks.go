@@ -133,7 +133,7 @@ func testTheOnlyTx(tx *moevmtypes.Transaction, sbchCli *SbchClient, height uint6
 		toPtr = nil
 	}
 
-	h := big.NewInt(int64(height - 1))
+	h := big.NewInt(int64(height))
 	callMsg := ethereum.CallMsg{
 		From:     tx.From,
 		To:       toPtr,
@@ -143,6 +143,7 @@ func testTheOnlyTx(tx *moevmtypes.Transaction, sbchCli *SbchClient, height uint6
 		Data:     tx.Input,
 	}
 
+	//_, _ = sbchCli.ethCall(callMsg, h)
 	callDetail, err := sbchCli.sbchCall(callMsg, h)
 	if err != nil {
 		panic(err)
