@@ -81,7 +81,10 @@ func testTxsInOneTxDb(oneTxDbDir, rpcUrl string, startHeight uint64, stopOnErr b
 		// }
 
 		fmt.Print("height: ", height, " tx: 0x", hex.EncodeToString(tx.Hash[:]))
-		if testTheOnlyTx(tx, sbchCli, height, stopOnErr) {
+		if tx.Status == 0 { // skip failed tx
+			fmt.Println(" SKIP")
+			return
+		} else if testTheOnlyTx(tx, sbchCli, height, stopOnErr) {
 			fmt.Println(" OK")
 		} else {
 			fmt.Println(" FAIL")
