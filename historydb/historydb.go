@@ -166,7 +166,8 @@ func (db *HistoryDb) AddRwLists(height uint64, rwLists *types.ReadWriteLists) {
 func (db *HistoryDb) AddRwListAtHeight(ctx *types.Context, height uint64) {
 	blk, err := ctx.GetBlockByHeight(height)
 	if err != nil {
-		panic(err)
+		//panic(err)
+		return
 	}
 	for _, txHash := range blk.Transactions {
 		tx, _, err := ctx.GetTxByHash(txHash)
