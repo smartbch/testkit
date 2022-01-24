@@ -117,7 +117,7 @@ func scanTheOnlyTxInBlocks(modbDir string, endHeight uint64, cb func(height uint
 			continue
 		}
 		fmt.Println("block:", h, "txs:", len(blk.Transactions))
-		if len(blk.Transactions) != 1 {
+		if len(blk.Transactions) < 1 {
 			continue
 		}
 		txHash := blk.Transactions[0]
