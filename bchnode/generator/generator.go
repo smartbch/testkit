@@ -17,7 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-var Version = "00"
+var Validator = "00"
+var Monitor = "01"
 var Identifier = "73424348"
 var ShaGateAddress = "14f8c7e99fd4e867c34cbd5968e35575fd5919a4"
 
@@ -38,40 +39,41 @@ type Context struct {
 	//internal
 	PubKeyInfoSet   []PubKeyInfo
 	PubkeyInfoIndex int
+	MonitorPubkey   string
 }
 
-var Ctx Context
-
-func Init() {
-	Ctx.NextBlockHeight = 1
-	Ctx.TxByHash = make(map[string]*TxInfo)
-	Ctx.BlkByHash = make(map[string]*BlockInfo)
-	Ctx.BlkHashByHeight = make(map[int64]string)
-	Ctx.PubkeyInfoByPubkey = make(map[string]*PubKeyInfo)
+func Init() *Context {
+	var ctx Context
+	ctx.NextBlockHeight = 1
+	ctx.TxByHash = make(map[string]*TxInfo)
+	ctx.BlkByHash = make(map[string]*BlockInfo)
+	ctx.BlkHashByHeight = make(map[int64]string)
+	ctx.PubkeyInfoByPubkey = make(map[string]*PubKeyInfo)
 
 	//inti logger
 	file, err := os.OpenFile("out.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}
-	Ctx.Log = log.New(io.MultiWriter(file, os.Stdout), "INFO: ", log.Ltime|log.Lshortfile)
+	ctx.Log = log.New(io.MultiWriter(file, os.Stdout), "INFO: ", log.Ltime|log.Lshortfile)
 
 	blockFile, err := os.OpenFile("block.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}
-	Ctx.BlockLog = log.New(blockFile, "", log.Ltime|log.Lshortfile)
+	ctx.BlockLog = log.New(blockFile, "", log.Ltime|log.Lshortfile)
 
 	//init producer
-	Ctx.Producer = &Producer{
-		Exit:              make(chan bool),
-		Reorg:             make(chan bool, 1),
-		Tx:                make(chan string, 1),
+	ctx.Producer = &Producer{
+		ExitChan:          make(chan bool),
+		ReorgChan:         make(chan bool, 1),
+		MonitorPubkeyChan: make(chan string, 1),
 		BlockIntervalTime: 3,
 	}
-	loadBlocksFromLog()
-	logPubKeysOnExit()
-	go Ctx.Producer.Start()
+	ctx.loadBlocksFromLog()
+	ctx.logPubKeysOnExit()
+	go ctx.Producer.Start(&ctx)
+	return &ctx
 }
 
 type JsonRpcError struct {
@@ -144,13 +146,13 @@ type TxInfo struct {
 
 var reorgBlockNumbers int64 = 8
 
-func ReorgBlock() {
-	h := Ctx.NextBlockHeight
+func (ctx *Context) ReorgBlock() {
+	h := ctx.NextBlockHeight
 	initHeight := h - reorgBlockNumbers
 	if initHeight <= 1 {
 		return
 	}
-	Ctx.RWLock.Lock()
+	ctx.RWLock.Lock()
 	for i := int64(0); i < reorgBlockNumbers; i++ {
 		bi := &BlockInfo{
 			Hash:          buildBlockHash(initHeight),
@@ -162,89 +164,57 @@ func ReorgBlock() {
 			NumTx:         1,
 		}
 		bi.Tx = append(bi.Tx, buildTxHash(bi.Hash, 0))
-		ti := BuildTxWithPubkey(0, bi.Hash, "reorg_tx")
+		ti := ctx.BuildTxWithPubkey(0, bi.Hash, "reorg_tx")
 		//change ctx
 		if bi.Height > 1 {
-			bi.PreviousBlockhash = Ctx.BlkByHash[Ctx.BlkHashByHeight[bi.Height-1]].Hash
+			bi.PreviousBlockhash = ctx.BlkByHash[ctx.BlkHashByHeight[bi.Height-1]].Hash
 		}
-		Ctx.BlkByHash[bi.Hash] = bi
-		Ctx.BlkHashByHeight[initHeight] = bi.Hash
-		Ctx.TxByHash[ti.Hash] = ti
+		ctx.BlkByHash[bi.Hash] = bi
+		ctx.BlkHashByHeight[initHeight] = bi.Hash
+		ctx.TxByHash[ti.Hash] = ti
 		initHeight++
 
-		Ctx.Log.Printf("Reorg: new block: %d, %s; coinbase tx: hash:%s, pubkey:%s, parentHash:%s\n", bi.Height, bi.Hash, ti.Hash, "reorg_tx", bi.PreviousBlockhash)
-		logBlock(bi, ti)
+		ctx.Log.Printf("ReorgChan: new block: %d, %s; coinbase tx: hash:%s, pubkey:%s, parentHash:%s\n", bi.Height, bi.Hash, ti.Hash, "reorg_tx", bi.PreviousBlockhash)
+		ctx.logBlock(bi, ti)
 	}
-	Ctx.RWLock.Unlock()
+	ctx.RWLock.Unlock()
 	return
 }
 
-func BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *BlockInfo {
+func (ctx *Context) BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x, len 64B*/) *BlockInfo {
 	if pubkey == "" {
 		return nil
 	}
 	bi := &BlockInfo{
-		Hash:          buildBlockHash(Ctx.NextBlockHeight),
+		Hash:          buildBlockHash(ctx.NextBlockHeight),
 		Confirmations: 1,      //1 confirm
 		Size:          100000, //100k
-		Height:        Ctx.NextBlockHeight,
+		Height:        ctx.NextBlockHeight,
 		Version:       8888, //for test
 		Time:          time.Now().Unix(),
 		NumTx:         1,
 	}
 	bi.Tx = append(bi.Tx, buildTxHash(bi.Hash, 0))
-	ti := BuildTxWithPubkey(0, bi.Hash, pubkey)
 	//change ctx
-	Ctx.RWLock.Lock()
+	ctx.RWLock.Lock()
 	if bi.Height > 1 {
-		bi.PreviousBlockhash = Ctx.BlkByHash[Ctx.BlkHashByHeight[bi.Height-1]].Hash
+		bi.PreviousBlockhash = ctx.BlkByHash[ctx.BlkHashByHeight[bi.Height-1]].Hash
 	}
-	Ctx.BlkByHash[bi.Hash] = bi
-	Ctx.BlkHashByHeight[Ctx.NextBlockHeight] = bi.Hash
-	Ctx.TxByHash[ti.Hash] = ti
-	Ctx.NextBlockHeight++
-	Ctx.RWLock.Unlock()
+	ctx.BlkByHash[bi.Hash] = bi
+	ctx.BlkHashByHeight[ctx.NextBlockHeight] = bi.Hash
+	ti := ctx.BuildTxWithPubkey(0, bi.Hash, pubkey)
+	ctx.TxByHash[ti.Hash] = ti
+	ctx.NextBlockHeight++
+	ctx.RWLock.Unlock()
 	//limit log amount
 	if bi.Height%20 == 1 {
-		Ctx.Log.Printf("new block: %d, %s; coinbase tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
+		ctx.Log.Printf("new block: %d, %s; coinbase tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
 	}
-	logBlock(bi, ti)
+	ctx.logBlock(bi, ti)
 	return bi
 }
 
-func BuildBlockWithCrossChainTx(pubkey string /*hex without 0x, len 64B*/) *BlockInfo {
-	if pubkey == "" {
-		return nil
-	}
-	bi := &BlockInfo{
-		Hash:          buildBlockHash(Ctx.NextBlockHeight),
-		Confirmations: 1,      //1 confirm
-		Size:          100000, //100k
-		Height:        Ctx.NextBlockHeight,
-		Version:       8888, //for test
-		Time:          time.Now().Unix(),
-		NumTx:         1,
-	}
-	bi.Tx = append(bi.Tx, buildTxHash(bi.Hash, 0))
-	ti := BuildCCTxWithPubkey(0, bi.Hash, pubkey)
-	//change ctx
-	Ctx.RWLock.Lock()
-	if bi.Height > 1 {
-		bi.PreviousBlockhash = Ctx.BlkByHash[Ctx.BlkHashByHeight[bi.Height-1]].Hash
-	}
-	Ctx.BlkByHash[bi.Hash] = bi
-	Ctx.BlkHashByHeight[Ctx.NextBlockHeight] = bi.Hash
-	Ctx.TxByHash[ti.Hash] = ti
-	Ctx.NextBlockHeight++
-	Ctx.RWLock.Unlock()
-	//limit log amount
-
-	Ctx.Log.Printf("new block: %d, %s; cc tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
-	logBlock(bi, ti)
-	return bi
-}
-
-func BuildTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
+func (ctx *Context) BuildTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
 	ti := &TxInfo{
 		Hash:      buildTxHash(blockHash, txIndex),
 		Size:      100,
@@ -253,26 +223,15 @@ func BuildTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
 	v := Vout{
 		ScriptPubKey: make(map[string]interface{}),
 	}
-	v.ScriptPubKey["asm"] = "OP_RETURN " + Identifier + Version + pubkey
+	v.ScriptPubKey["asm"] = "OP_RETURN " + Identifier + Validator + pubkey
 	ti.VoutList = append(ti.VoutList, v)
-	return ti
-}
-
-func BuildCCTxWithPubkey(txIndex int64, blockHash, pubkey string) *TxInfo {
-	ti := &TxInfo{
-		Hash:      buildTxHash(blockHash, txIndex),
-		Size:      100,
-		Blockhash: blockHash,
+	if ctx.MonitorPubkey != "" {
+		v = Vout{
+			ScriptPubKey: make(map[string]interface{}),
+		}
+		v.ScriptPubKey["asm"] = "OP_RETURN " + Identifier + Monitor + ctx.MonitorPubkey
+		ti.VoutList = append(ti.VoutList, v)
 	}
-	v := Vout{
-		ScriptPubKey: make(map[string]interface{}),
-		Value:        crosschainTransferDefaultAmount,
-	}
-	v.ScriptPubKey["asm"] = "OP_HASH160 " + ShaGateAddress + " OP_EQUAL"
-	ti.VoutList = append(ti.VoutList, v)
-	vin := make(map[string]interface{})
-	vin["test"] = pubkey
-	ti.VinList = append(ti.VinList, vin)
 	return ti
 }
 
@@ -297,20 +256,20 @@ type PubKeyInfo struct {
 	RemainCount int64 //init same with Voting power
 }
 
-func logBlock(bi *BlockInfo, ti *TxInfo) {
+func (ctx *Context) logBlock(bi *BlockInfo, ti *TxInfo) {
 	biJSON, _ := json.Marshal(bi)
-	Ctx.BlockLog.Println("block: ", string(biJSON))
+	ctx.BlockLog.Println("block: ", string(biJSON))
 
 	tiJSON, _ := json.Marshal(ti)
-	Ctx.BlockLog.Println("tx: ", string(tiJSON))
+	ctx.BlockLog.Println("tx: ", string(tiJSON))
 }
 
-func loadBlocksFromLog() {
-	Ctx.Log.Println("loading blocks from log ...")
+func (ctx *Context) loadBlocksFromLog() {
+	ctx.Log.Println("loading blocks from log ...")
 
 	f, err := os.Open("block.log")
 	if err != nil {
-		Ctx.Log.Println(err.Error())
+		ctx.Log.Println(err.Error())
 		return
 	}
 	defer f.Close()
@@ -326,10 +285,10 @@ func loadBlocksFromLog() {
 			if err != nil {
 				panic(err)
 			}
-			Ctx.Log.Printf("loaded block: %d\n", bi.Height)
-			Ctx.BlkByHash[bi.Hash] = bi
-			Ctx.BlkHashByHeight[bi.Height] = bi.Hash
-			Ctx.NextBlockHeight = bi.Height + 1
+			ctx.Log.Printf("loaded block: %d\n", bi.Height)
+			ctx.BlkByHash[bi.Hash] = bi
+			ctx.BlkHashByHeight[bi.Height] = bi.Hash
+			ctx.NextBlockHeight = bi.Height + 1
 		}
 		if idx := strings.Index(line, "tx:"); idx > 0 {
 			ti := &TxInfo{}
@@ -337,8 +296,8 @@ func loadBlocksFromLog() {
 			if err != nil {
 				panic(err)
 			}
-			Ctx.Log.Printf("loaded tx: %s\n", ti.Hash)
-			Ctx.TxByHash[ti.Hash] = ti
+			ctx.Log.Printf("loaded tx: %s\n", ti.Hash)
+			ctx.TxByHash[ti.Hash] = ti
 		}
 		if idx := strings.Index(line, "pubkey:"); idx > 0 {
 			pubkeys := map[string]*PubKeyInfo{}
@@ -346,20 +305,20 @@ func loadBlocksFromLog() {
 			if err != nil {
 				panic(err)
 			}
-			Ctx.Log.Println("loaded pubkeys: ", line[idx+7:])
-			Ctx.PubkeyInfoByPubkey = pubkeys
+			ctx.Log.Println("loaded pubkeys: ", line[idx+7:])
+			ctx.PubkeyInfoByPubkey = pubkeys
 		}
 	}
 }
 
-func logPubKeysOnExit() {
+func (ctx *Context) logPubKeysOnExit() {
 	trapSignal(func() {
-		Ctx.Log.Println("saving pubkeys ...")
-		bytes, err := json.Marshal(Ctx.PubkeyInfoByPubkey)
+		ctx.Log.Println("saving pubkeys ...")
+		bytes, err := json.Marshal(ctx.PubkeyInfoByPubkey)
 		if err == nil {
-			Ctx.BlockLog.Println("pubkey: ", string(bytes))
+			ctx.BlockLog.Println("pubkey: ", string(bytes))
 		} else {
-			Ctx.Log.Println(err.Error())
+			ctx.Log.Println(err.Error())
 		}
 	})
 }

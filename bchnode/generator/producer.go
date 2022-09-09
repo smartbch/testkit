@@ -11,28 +11,28 @@ var (
 )
 
 type Producer struct {
-	Exit              chan bool
-	Reorg             chan bool
-	Tx                chan string
+	ExitChan          chan bool
+	ReorgChan         chan bool
+	MonitorPubkeyChan chan string
 	Lock              sync.Mutex
 	BlockIntervalTime int64 //uint: second
 }
 
-func (p *Producer) Start() {
+func (p *Producer) Start(ctx *Context) {
 	for {
 		select {
-		case <-p.Exit:
+		case <-p.ExitChan:
 			return
-		case <-p.Reorg:
-			ReorgBlock()
-		case pubkey := <-p.Tx:
-			BuildBlockWithCrossChainTx(pubkey)
+		case <-p.ReorgChan:
+			ctx.ReorgBlock()
+		case pubkey := <-p.MonitorPubkeyChan:
+			ctx.MonitorPubkey = pubkey
 		default:
 			//BuildBlockWithCrossChainTx("034872060af10ec594db868ce81e16763828e30441916b37e5c31ea2154b46639a")
-			bi := BuildBlockRespWithCoinbaseTx(getPubkey())
+			bi := ctx.BuildBlockRespWithCoinbaseTx(ctx.getPubkey())
 			if bi == nil {
 				time.Sleep(10 * time.Second)
-				Ctx.Log.Println("no pubkey info")
+				ctx.Log.Println("no pubkey info")
 				continue
 			}
 			time.Sleep(time.Duration(p.BlockIntervalTime) * time.Second)
@@ -40,35 +40,35 @@ func (p *Producer) Start() {
 	}
 }
 
-func getPubkey() string {
-	Ctx.RWLock.RLock()
-	if Ctx.PubkeyInfoIndex == 0 {
-		reloadPubkeyInfo()
-	} else if Ctx.PubkeyInfoIndex == len(Ctx.PubKeyInfoSet) {
-		Ctx.PubkeyInfoIndex = 0
-		reloadPubkeyInfo()
+func (ctx *Context) getPubkey() string {
+	ctx.RWLock.RLock()
+	if ctx.PubkeyInfoIndex == 0 {
+		ctx.reloadPubkeyInfo()
+	} else if ctx.PubkeyInfoIndex == len(ctx.PubKeyInfoSet) {
+		ctx.PubkeyInfoIndex = 0
+		ctx.reloadPubkeyInfo()
 	}
-	if len(Ctx.PubKeyInfoSet) == 0 {
-		Ctx.RWLock.RUnlock()
+	if len(ctx.PubKeyInfoSet) == 0 {
+		ctx.RWLock.RUnlock()
 		return ""
 	}
-	fmt.Printf("len of pubkeyInfoSet: %d\n", len(Ctx.PubKeyInfoSet))
-	Ctx.RWLock.RUnlock()
-	pi := &Ctx.PubKeyInfoSet[Ctx.PubkeyInfoIndex]
+	fmt.Printf("len of pubkeyInfoSet: %d\n", len(ctx.PubKeyInfoSet))
+	ctx.RWLock.RUnlock()
+	pi := &ctx.PubKeyInfoSet[ctx.PubkeyInfoIndex]
 	if pi.RemainCount == 0 {
 		panic("voting power remain should be positive")
 	}
 	pi.RemainCount--
 	if pi.RemainCount == 0 {
 		pi.RemainCount = pi.VotingPower
-		Ctx.PubkeyInfoIndex++
+		ctx.PubkeyInfoIndex++
 	}
 	return pi.Pubkey
 }
 
-func reloadPubkeyInfo() {
-	Ctx.PubKeyInfoSet = make([]PubKeyInfo, 0, len(Ctx.PubkeyInfoByPubkey))
-	for _, in := range Ctx.PubkeyInfoByPubkey {
-		Ctx.PubKeyInfoSet = append(Ctx.PubKeyInfoSet, *in)
+func (ctx *Context) reloadPubkeyInfo() {
+	ctx.PubKeyInfoSet = make([]PubKeyInfo, 0, len(ctx.PubkeyInfoByPubkey))
+	for _, in := range ctx.PubkeyInfoByPubkey {
+		ctx.PubKeyInfoSet = append(ctx.PubKeyInfoSet, *in)
 	}
 }
