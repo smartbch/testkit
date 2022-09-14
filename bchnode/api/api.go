@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,54 +10,43 @@ import (
 	"strings"
 
 	"github.com/smartbch/testkit/bchnode/generator"
+	"github.com/smartbch/testkit/bchnode/generator/types"
 )
 
-type BlockCountService struct {
-	ctx *generator.Context
+var ctx *generator.Context
+
+func InitContext(c *generator.Context) {
+	ctx = c
 }
 
-func MakeBlockCountService(ctx *generator.Context) BlockCountService {
-	return BlockCountService{ctx: ctx}
-}
+type BlockCountService struct{}
 
-func (b *BlockCountService) Call(r *http.Request, _ *string, result *int64) error {
-	b.ctx.RWLock.RLock()
-	*result = b.ctx.NextBlockHeight - 1
-	b.ctx.RWLock.RUnlock()
+func (_ *BlockCountService) Call(r *http.Request, _ *string, result *int64) error {
+	ctx.RWLock.RLock()
+	*result = ctx.NextBlockHeight - 1
+	ctx.RWLock.RUnlock()
 	return nil
 }
 
-type BlockHashService struct {
-	ctx *generator.Context
-}
+type BlockHashService struct{}
 
-func MakeBlockHashService(ctx *generator.Context) BlockHashService {
-	return BlockHashService{ctx: ctx}
-}
-
-func (b *BlockHashService) Call(r *http.Request, args *int64, result *string) error {
+func (_ *BlockHashService) Call(r *http.Request, args *int64, result *string) error {
 	var ok bool
-	b.ctx.RWLock.RLock()
-	*result, ok = b.ctx.BlkHashByHeight[*args]
-	b.ctx.RWLock.RUnlock()
+	ctx.RWLock.RLock()
+	*result, ok = ctx.BlkHashByHeight[*args]
+	ctx.RWLock.RUnlock()
 	if !ok {
 		return errors.New("no such height")
 	}
 	return nil
 }
 
-type BlockService struct {
-	ctx *generator.Context
-}
+type BlockService struct{}
 
-func MakeBlockService(ctx *generator.Context) BlockService {
-	return BlockService{ctx: ctx}
-}
-
-func (b *BlockService) Call(r *http.Request, args *string, result *generator.BlockInfo) error {
-	b.ctx.RWLock.RLock()
-	info, ok := b.ctx.BlkByHash[*args]
-	b.ctx.RWLock.RUnlock()
+func (_ *BlockService) Call(r *http.Request, args *string, result *types.BlockInfo) error {
+	ctx.RWLock.RLock()
+	info, ok := ctx.BlkByHash[*args]
+	ctx.RWLock.RUnlock()
 	if !ok {
 		return errors.New("no such block hash")
 	}
@@ -64,18 +54,12 @@ func (b *BlockService) Call(r *http.Request, args *string, result *generator.Blo
 	return nil
 }
 
-type TxService struct {
-	ctx *generator.Context
-}
+type TxService struct{}
 
-func MakeTxService(ctx *generator.Context) TxService {
-	return TxService{ctx: ctx}
-}
-
-func (t *TxService) Call(r *http.Request, args *string, result *generator.TxInfo) error {
-	t.ctx.RWLock.RLock()
-	info, ok := t.ctx.TxByHash[*args]
-	t.ctx.RWLock.RUnlock()
+func (_ *TxService) Call(r *http.Request, args *string, result *types.TxInfo) error {
+	ctx.RWLock.RLock()
+	info, ok := ctx.TxByHash[*args]
+	ctx.RWLock.RUnlock()
 	if !ok {
 		return errors.New("No such tx hash")
 	}
@@ -83,15 +67,9 @@ func (t *TxService) Call(r *http.Request, args *string, result *generator.TxInfo
 	return nil
 }
 
-type PubKeyService struct {
-	ctx *generator.Context
-}
+type PubKeyService struct{}
 
-func MakePubKeyService(ctx *generator.Context) PubKeyService {
-	return PubKeyService{ctx: ctx}
-}
-
-func (p *PubKeyService) Call(r *http.Request, args *string, result *string) error {
+func (_ *PubKeyService) Call(r *http.Request, args *string, result *string) error {
 	s := strings.Split(*args, "-")
 	if len(s) != 3 {
 		return errors.New("invalid format")
@@ -106,69 +84,64 @@ func (p *PubKeyService) Call(r *http.Request, args *string, result *string) erro
 	}
 	info.RemainCount = int64(vp)
 	info.VotingPower = int64(vp)
-	p.ctx.RWLock.Lock()
+	ctx.RWLock.Lock()
 	if s[2] == "add" || s[2] == "edit" {
 		if info.VotingPower <= 0 {
-			p.ctx.RWLock.Unlock()
+			ctx.RWLock.Unlock()
 			return errors.New("voting power should be positive when add or edit an validator")
 		}
-		p.ctx.PubkeyInfoByPubkey[info.Pubkey] = info
+		ctx.PubkeyInfoByPubkey[info.Pubkey] = info
 	} else if s[2] == "retire" {
-		delete(p.ctx.PubkeyInfoByPubkey, info.Pubkey)
+		delete(ctx.PubkeyInfoByPubkey, info.Pubkey)
 	} else {
-		p.ctx.RWLock.Unlock()
+		ctx.RWLock.Unlock()
 		return errors.New("invalid action")
 	}
-	p.ctx.RWLock.Unlock()
+	ctx.RWLock.Unlock()
 	*result = "send success"
 	return nil
 }
 
-type BlockIntervalService struct {
-	ctx *generator.Context
-}
+type BlockIntervalService struct{}
 
-func MakeBlockIntervalService(ctx *generator.Context) BlockIntervalService {
-	return BlockIntervalService{ctx: ctx}
-}
-
-func (b *BlockIntervalService) Call(r *http.Request, args *int64, result *string) error {
-	b.ctx.Producer.Lock.Lock()
-	b.ctx.Producer.BlockIntervalTime = *args
-	b.ctx.Producer.Lock.Unlock()
+func (_ *BlockIntervalService) Call(r *http.Request, args *int64, result *string) error {
+	ctx.Producer.Lock.Lock()
+	ctx.Producer.BlockIntervalTime = *args
+	ctx.Producer.Lock.Unlock()
 	*result = "send success"
 	return nil
 }
 
-type BlockReorgService struct {
-	ctx *generator.Context
-}
+type BlockReorgService struct{}
 
-func MakeBlockReorgService(ctx *generator.Context) BlockReorgService {
-	return BlockReorgService{ctx: ctx}
-}
-
-func (b *BlockReorgService) Call(r *http.Request, args *int64, result *string) error {
-	b.ctx.Producer.ReorgChan <- true
+func (_ *BlockReorgService) Call(r *http.Request, args *int64, result *string) error {
+	ctx.Producer.ReorgChan <- true
 	*result = "send success"
 	return nil
 }
 
-type CCService struct {
-	ctx *generator.Context
-}
+type MonitorVoteService struct{}
 
-func MakeCCService(ctx *generator.Context) CCService {
-	return CCService{ctx: ctx}
-}
-
-func (c *CCService) Call(r *http.Request, args *string, result *string) error {
+func (_ *MonitorVoteService) Call(r *http.Request, args *string, result *string) error {
 	pubkey := *args
 	pubkeyBytes, err := hex.DecodeString(pubkey)
 	if err != nil || len(pubkeyBytes) != 33 {
-		*result = "must 33bytes pubkey hex string without 0x"
+		return errors.New("must 33bytes pubkey hex string without 0x")
 	}
-	c.ctx.Producer.MonitorPubkeyChan <- *args
+	ctx.Producer.MonitorPubkeyChan <- *args
+	*result = "send success"
+	return nil
+}
+
+type CCService struct{}
+
+func (_ *CCService) Call(r *http.Request, args *string, result *string) error {
+	tx := types.TxInfo{}
+	err := json.Unmarshal([]byte(*args), &tx)
+	if err != nil {
+		return errors.New("must bch tx json format")
+	}
+	ctx.Producer.CCTxChan <- tx
 	*result = "send success"
 	return nil
 }

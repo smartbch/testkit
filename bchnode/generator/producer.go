@@ -2,18 +2,16 @@ package generator
 
 import (
 	"fmt"
+	"github.com/smartbch/testkit/bchnode/generator/types"
 	"sync"
 	"time"
-)
-
-var (
-	crosschainTransferDefaultAmount int64 = 16
 )
 
 type Producer struct {
 	ExitChan          chan bool
 	ReorgChan         chan bool
 	MonitorPubkeyChan chan string
+	CCTxChan          chan types.TxInfo
 	Lock              sync.Mutex
 	BlockIntervalTime int64 //uint: second
 }
@@ -27,12 +25,13 @@ func (p *Producer) Start(ctx *Context) {
 			ctx.ReorgBlock()
 		case pubkey := <-p.MonitorPubkeyChan:
 			ctx.MonitorPubkey = pubkey
+		case tx := <-p.CCTxChan:
+			ctx.CCTxs = append(ctx.CCTxs, tx)
 		default:
-			//BuildBlockWithCrossChainTx("034872060af10ec594db868ce81e16763828e30441916b37e5c31ea2154b46639a")
 			bi := ctx.BuildBlockRespWithCoinbaseTx(ctx.getPubkey())
 			if bi == nil {
 				time.Sleep(10 * time.Second)
-				ctx.Log.Println("no pubkey info")
+				ctx.Log.Println("no validator pubkey and monitor pubkey info both")
 				continue
 			}
 			time.Sleep(time.Duration(p.BlockIntervalTime) * time.Second)
