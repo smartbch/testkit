@@ -21,7 +21,7 @@ type BlockInfo struct {
 }
 
 type Vout struct {
-	Value        int64                  `json:"value"`
+	Value        float64                `json:"value"`
 	N            int                    `json:"n"`
 	ScriptPubKey map[string]interface{} `json:"scriptPubKey"`
 }
