@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/smartbch/testkit/cctester/config"
 	"os/exec"
 	"strings"
 
@@ -141,4 +142,19 @@ func GetLatestBlockHeight() string {
 		panic("not get the block height")
 	}
 	return fmt.Sprintf("%d", int64(res.Result))
+}
+
+func StartSideChainNode() {
+	sideNodeParams := []string{
+		"start",
+		"--home", "/Users/bear/.smartbchd",
+		"--unlock", "0xe3d9be2e6430a9db8291ab1853f5ec2467822b33a1a08825a22fab1425d2bff9",
+		"--https.addr=off",
+		"--wss.addr=off",
+		"--http.api=eth,web3,net,txpool,sbch,debug",
+		"--log_level=json-rpc:debug,watcher:debug,app:debug",
+		"--skip-sanity-check=true",
+		"--with-syncdb=false",
+	}
+	ExecuteWithContinuousOutPut(config.SideNodePath, sideNodeParams...)
 }
