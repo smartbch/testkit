@@ -33,7 +33,8 @@ func Test() {
 func TestRedeemableWithBelowMinAMount() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000002"
 	var covenantAddress = "0x0000000000000000000000000000000000000001"
-	var receiver string = "0x09f236e4067f5fca5872d0c09f92ce653377ae41"
+	//0xab5d62788e207646fa60eb3eebdc4358c7f5686c
+	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "0.1"
 	var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e7), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
@@ -88,7 +89,7 @@ func TestRedeemableWithBelowMinAMount() {
 func TestLostAndFoundWithAboveMaxAMount() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000001"
 	var covenantAddress = "0x0000000000000000000000000000000000000001"
-	var receiver string = "0x09f236e4067f5fca5872d0c09f92ce653377ae41"
+	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "2000"
 	//var amountInSatoshi = "0x2e90edd000" //2000_00000000
 	//var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e7), uint256.NewInt(1e10))
@@ -151,7 +152,7 @@ func TestLostAndFoundWithAboveMaxAMount() {
 func TestLostAndFoundWithBelowMinAMount() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000002"
 	var covenantAddress = "0x0000000000000000000000000000000000000001"
-	var receiver string = "0x09f236e4067f5fca5872d0c09f92ce653377ae41"
+	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "0.1"
 	//var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e7), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
@@ -212,7 +213,7 @@ func TestLostAndFoundWithBelowMinAMount() {
 
 func TestLostAndFoundWithOldCovenantAddress() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000003"
-	var receiver string = "0x09f236e4067f5fca5872d0c09f92ce653377ae41"
+	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "1"
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
 	var lastCovenantAddress = "0x0000000000000000000000000000000000000002"
@@ -272,7 +273,7 @@ func TestLostAndFoundWithOldCovenantAddress() {
 func TestNormal() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000004"
 	var covenantAddress = "0x0000000000000000000000000000000000000001"
-	var receiver string = "0x09f236e4067f5fca5872d0c09f92ce653377ae41"
+	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "1"
 	var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e8), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
