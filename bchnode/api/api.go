@@ -137,6 +137,10 @@ type CCService struct{}
 
 func (_ *CCService) Call(r *http.Request, args *string, result *string) error {
 	tx := types.TxInfo{}
+	if args == nil {
+		fmt.Println("args is nil")
+	}
+	fmt.Println(*args)
 	err := json.Unmarshal([]byte(*args), &tx)
 	if err != nil {
 		return errors.New("must bch tx json format")

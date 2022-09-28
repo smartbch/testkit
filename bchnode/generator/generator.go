@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/smartbch/testkit/bchnode/generator/types"
 	"io"
 	"log"
 	"os"
@@ -16,6 +15,8 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+
+	"github.com/smartbch/testkit/bchnode/generator/types"
 )
 
 var Validator = "00"
@@ -69,7 +70,7 @@ func Init() *Context {
 		ReorgChan:         make(chan bool, 1),
 		MonitorPubkeyChan: make(chan string, 1),
 		CCTxChan:          make(chan types.TxInfo, 100),
-		BlockIntervalTime: 3,
+		BlockIntervalTime: 2,
 	}
 	ctx.loadBlocksFromLog()
 	ctx.logPubKeysOnExit()
@@ -171,7 +172,7 @@ func (ctx *Context) BuildBlockRespWithCoinbaseTx(pubkey string /*hex without 0x,
 	ctx.NextBlockHeight++
 	ctx.RWLock.Unlock()
 	//limit log amount
-	if bi.Height%20 == 1 {
+	if bi.Height%50 == 1 {
 		ctx.Log.Printf("new block: %d, %s; coinbase tx: hash:%s, pubkey:%s\n", bi.Height, bi.Hash, ti.Hash, pubkey)
 	}
 	ctx.logBlock(bi, bi.Tx)

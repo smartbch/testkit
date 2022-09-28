@@ -94,8 +94,8 @@ func transferToSbchCmd() *cobra.Command {
 				})
 			}
 
-			data, _ := json.MarshalIndent(tx, "", "  ")
-			fmt.Println(string(data))
+			data, _ := json.Marshal(tx)
+			fmt.Printf(string(data))
 
 			return nil
 		},
@@ -147,8 +147,8 @@ func redeemByUserCmd() *cobra.Command {
 				},
 			})
 
-			data, _ := json.MarshalIndent(tx, "", "  ")
-			fmt.Println(string(data))
+			data, _ := json.Marshal(tx)
+			fmt.Printf(string(data))
 
 			return nil
 		},
@@ -202,8 +202,8 @@ func convertByOperatorsCmd() *cobra.Command {
 				},
 			})
 
-			data, _ := json.MarshalIndent(tx, "", "  ")
-			fmt.Println(string(data))
+			data, _ := json.Marshal(tx)
+			fmt.Printf(string(data))
 
 			return nil
 		},

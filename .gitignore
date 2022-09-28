@@ -18,3 +18,7 @@ chaintracker/chaintracker
 repeatnonce/repeatnonce
 *.log
 .idea
+
+bchnode/fakenode
+bchutxomaker/txmaker
+cctester/build

@@ -1,10 +1,10 @@
 package generator
 
 import (
-	"fmt"
-	"github.com/smartbch/testkit/bchnode/generator/types"
 	"sync"
 	"time"
+
+	"github.com/smartbch/testkit/bchnode/generator/types"
 )
 
 type Producer struct {
@@ -31,7 +31,7 @@ func (p *Producer) Start(ctx *Context) {
 			bi := ctx.BuildBlockRespWithCoinbaseTx(ctx.getPubkey())
 			if bi == nil {
 				time.Sleep(10 * time.Second)
-				ctx.Log.Println("no validator pubkey and monitor pubkey info both")
+				//ctx.Log.Println("no validator pubkey and monitor pubkey info both")
 				continue
 			}
 			time.Sleep(time.Duration(p.BlockIntervalTime) * time.Second)
@@ -51,7 +51,7 @@ func (ctx *Context) getPubkey() string {
 		ctx.RWLock.RUnlock()
 		return ""
 	}
-	fmt.Printf("len of pubkeyInfoSet: %d\n", len(ctx.PubKeyInfoSet))
+	//fmt.Printf("len of pubkeyInfoSet: %d\n", len(ctx.PubKeyInfoSet))
 	ctx.RWLock.RUnlock()
 	pi := &ctx.PubKeyInfoSet[ctx.PubkeyInfoIndex]
 	if pi.RemainCount == 0 {
