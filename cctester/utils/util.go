@@ -106,6 +106,27 @@ func GetRedeemingUTXOs() []*UtxoInfo {
 	return res.Result
 }
 
+func GetToBeConvertedUTXOs() []*UtxoInfo {
+	args := []string{"-X", "POST", "--data", "{\"jsonrpc\":\"2.0\",\"method\":\"sbch_getToBeConvertedUTXOsForMonitors\",\"params\":[],\"id\":1}", "-H", "Content-Type: application/json", "http://127.0.0.1:8545"}
+	out := Execute("curl", args...)
+	//fmt.Println(out)
+	type serverResponse struct {
+		Result []*UtxoInfo      `json:"result"`
+		Error  interface{}      `json:"error"`
+		Id     *json.RawMessage `json:"id"`
+	}
+	var res serverResponse
+	fmt.Println(out)
+	err := json.Unmarshal([]byte(out), &res)
+	if err != nil {
+		panic(err)
+	}
+	if res.Error != nil {
+		panic(res.Error)
+	}
+	return res.Result
+}
+
 func GetAccBalance(address string) *uint256.Int {
 	args := []string{"-X", "POST", "--data", fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\",\"params\":[\"%s\",\"latest\"],\"id\":1}", address), "-H", "Content-Type: application/json", "http://127.0.0.1:8545"}
 	out := Execute("curl", args...)
@@ -127,6 +148,27 @@ func GetAccBalance(address string) *uint256.Int {
 	return balance
 }
 
+func GetSideChainBlockHeight() uint64 {
+	args := []string{"-X", "POST", "--data", "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}", "-H", "Content-Type: application/json", "http://127.0.0.1:8545"}
+	out := Execute("curl", args...)
+	fmt.Println(out)
+	type serverResponse struct {
+		Result string           `json:"result"`
+		Error  interface{}      `json:"error"`
+		Id     *json.RawMessage `json:"id"`
+	}
+	var res serverResponse
+	err := json.Unmarshal([]byte(out), &res)
+	if err != nil {
+		panic(err)
+	}
+	balance, err := hexutil.DecodeUint64(res.Result)
+	if err != nil {
+		panic(err)
+	}
+	return balance
+
+}
 func GetLatestBlockHeight() string {
 	args := []string{"-X", "POST", "--data", "{\"jsonrpc\":\"2.0\",\"method\":\"getblockcount\",\"params\":[],\"id\":1}", "-H", "Content-Type: application/json", "http://127.0.0.1:1234", "-v"}
 	out := Execute("curl", args...)

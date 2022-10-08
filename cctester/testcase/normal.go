@@ -14,25 +14,28 @@ import (
 )
 
 func Test() {
-	fmt.Printf("-------------- TestLostAndFoundWithBelowMinAMount -------------\n")
-	TestLostAndFoundWithBelowMinAMount()
+	fmt.Printf("--------- Test convert -----------\n")
+	TestConvert()
 	time.Sleep(5 * time.Second)
-	fmt.Printf("-------------- TestLostAndFoundWithAboveMaxAMount -------------\n")
-	TestLostAndFoundWithAboveMaxAMount()
+	fmt.Printf("-------------- TestLostAndFoundWithBelowMinAmount -------------\n")
+	TestLostAndFoundWithBelowMinAmount()
+	time.Sleep(5 * time.Second)
+	fmt.Printf("-------------- TestLostAndFoundWithAboveMaxAmount -------------\n")
+	TestLostAndFoundWithAboveMaxAmount()
 	time.Sleep(5 * time.Second)
 	fmt.Printf("-------------- TestLostAndFoundWithOldCovenantAddress -------------\n")
 	TestLostAndFoundWithOldCovenantAddress()
 	time.Sleep(5 * time.Second)
 	fmt.Printf("-------------- TestNormal -------------\n")
 	TestNormal()
-	fmt.Printf("-------------- TestRedeemableWithBelowMinAMount -------------\n")
-	TestRedeemableWithBelowMinAMount()
+	fmt.Printf("-------------- TestRedeemableWithBelowMinAmount -------------\n")
+	TestRedeemableWithBelowMinAmount()
 	os.Exit(0)
 }
 
-func TestRedeemableWithBelowMinAMount() {
+func TestRedeemableWithBelowMinAmount() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000002"
-	var covenantAddress = "0x0000000000000000000000000000000000000001"
+	var covenantAddress = "0x0000000000000000000000000000000000000002"
 	//0xab5d62788e207646fa60eb3eebdc4358c7f5686c
 	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "0.1"
@@ -86,9 +89,9 @@ func TestRedeemableWithBelowMinAMount() {
 	}
 }
 
-func TestLostAndFoundWithAboveMaxAMount() {
+func TestLostAndFoundWithAboveMaxAmount() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000001"
-	var covenantAddress = "0x0000000000000000000000000000000000000001"
+	var covenantAddress = "0x0000000000000000000000000000000000000002"
 	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "2000"
 	//var amountInSatoshi = "0x2e90edd000" //2000_00000000
@@ -149,11 +152,11 @@ func TestLostAndFoundWithAboveMaxAMount() {
 	}
 }
 
-func TestLostAndFoundWithBelowMinAMount() {
+func TestLostAndFoundWithBelowMinAmount() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000002"
-	var covenantAddress = "0x0000000000000000000000000000000000000001"
+	var covenantAddress = "0x0000000000000000000000000000000000000002"
 	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
-	var amount string = "0.1"
+	var amount string = "0.9"
 	//var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e7), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
@@ -216,7 +219,7 @@ func TestLostAndFoundWithOldCovenantAddress() {
 	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "1"
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
-	var lastCovenantAddress = "0x0000000000000000000000000000000000000002"
+	var lastCovenantAddress = "0x0000000000000000000000000000000000000001"
 
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
 	buildAndSendTransferTx(txid, lastCovenantAddress, receiver, amount)
@@ -272,7 +275,7 @@ func TestLostAndFoundWithOldCovenantAddress() {
 
 func TestNormal() {
 	var txid = "0x0000000000000000000000000000000000000000000000000000000000000004"
-	var covenantAddress = "0x0000000000000000000000000000000000000001"
+	var covenantAddress = "0x0000000000000000000000000000000000000002"
 	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
 	var amount string = "1"
 	var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e8), uint256.NewInt(1e10))
@@ -324,11 +327,129 @@ func TestNormal() {
 	}
 }
 
+func TestConvert() {
+	var txid = "0x0000000000000000000000000000000000000000000000000000000000000005"
+	var newTxid = "0x0000000000000000000000000000000000000000000000000000000000000006"
+	var covenantAddress = "0x0000000000000000000000000000000000000001"
+	var newCovenantAddress = "0x0000000000000000000000000000000000000002"
+
+	var receiver string = "0xab5d62788e207646fa60eb3eebdc4358c7f5686c"
+	var amount string = "1"
+	var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e8), uint256.NewInt(1e10))
+	var newAmount string = "0.9999"
+	var newAmountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(9999e4), uint256.NewInt(1e10))
+
+	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
+	fmt.Println(`-------------------- send cc transfer tx -------------------`)
+	buildAndSendTransferTx(txid, covenantAddress, receiver, amount)
+	time.Sleep(5 * time.Second)
+	fmt.Println(`-------------------- send startRescan tx -------------------`)
+	buildAndSendStartRescanTx()
+	time.Sleep(10 * time.Second)
+	balance := utils.GetAccBalance(receiver)
+	fmt.Println(`-------------------- send handle utxo tx -------------------`)
+	buildAndSendHandleUTXOTx()
+	time.Sleep(4 * time.Second)
+	balance1 := utils.GetAccBalance(receiver)
+	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
+	fmt.Printf("balance: %s\n", receiveAmount.String())
+	if !receiveAmount.Eq(amountInSideChain) {
+		panic("balance not match")
+	}
+	fmt.Println(`-------------------- send startRescan tx to change covenant address -------------------`)
+	latestSideChainHeight := utils.GetSideChainBlockHeight()
+	for latestSideChainHeight <= 30 {
+		fmt.Printf("side chain height:%d\n", latestSideChainHeight)
+		time.Sleep(5 * time.Second)
+		latestSideChainHeight = utils.GetSideChainBlockHeight()
+	}
+	buildAndSendStartRescanTx()
+	time.Sleep(6 * time.Second)
+	fmt.Println(`-------------------- check utxo record from rpc -------------------`)
+	utxoRecords := utils.GetRedeemingUTXOs()
+	if len(utxoRecords) != 0 {
+		panic("")
+	}
+	toBeConvertedUtxoRecords := utils.GetToBeConvertedUTXOs()
+	if len(toBeConvertedUtxoRecords) != 1 {
+		panic("")
+	}
+	if toBeConvertedUtxoRecords[0].Txid.String() != txid {
+		panic("")
+	}
+	fmt.Println(`--------------------- send main chain convert tx -------------------`)
+	buildAndSendConvertTx(txid[2:], newTxid[2:], newCovenantAddress, newAmount)
+	time.Sleep(5 * time.Second)
+	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
+	latestSideChainHeight = utils.GetSideChainBlockHeight()
+	for latestSideChainHeight <= 60 {
+		fmt.Printf("side chain height:%d\n", latestSideChainHeight)
+		time.Sleep(5 * time.Second)
+		latestSideChainHeight = utils.GetSideChainBlockHeight()
+	}
+	buildAndSendStartRescanTx()
+	time.Sleep(15 * time.Second)
+	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
+	buildAndSendHandleUTXOTx()
+	time.Sleep(4 * time.Second)
+	utxoRecords = utils.GetRedeemingUTXOs()
+	if len(utxoRecords) != 0 {
+		panic("")
+	}
+	fmt.Println(`-------------------- send redeem tx second time -------------------`)
+	balance2 := utils.GetAccBalance(receiver)
+	buildAndSendRedeemTx(newTxid, receiver, "999900000000000000")
+	time.Sleep(4 * time.Second)
+	balance3 := utils.GetAccBalance(receiver)
+	burnAddress := uint256.NewInt(0).Sub(balance2, uint256.NewInt(0).Add(balance3, normalGasFee))
+	fmt.Println(burnAddress.String())
+	fmt.Println(newAmountInSideChain.String())
+	if !burnAddress.Eq(newAmountInSideChain) {
+		panic("balance not match after redeem")
+	}
+	fmt.Println(`-------------------- check utxo record from rpc second time -------------------`)
+	utxoRecords = utils.GetRedeemingUTXOs()
+	if len(utxoRecords) != 1 {
+		panic("")
+	}
+	if utxoRecords[0].Txid.String() != newTxid {
+		panic("")
+	}
+	if utxoRecords[0].CovenantAddr.String() != newCovenantAddress {
+		panic("")
+	}
+	fmt.Println(`--------------------- send main chain redeem tx -------------------`)
+	buildAndSendMainnetRedeemTx(newTxid[2:])
+	time.Sleep(5 * time.Second)
+	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
+	buildAndSendStartRescanTx()
+	time.Sleep(15 * time.Second)
+	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
+	buildAndSendHandleUTXOTx()
+	time.Sleep(4 * time.Second)
+	utxoRecords = utils.GetRedeemingUTXOs()
+	if len(utxoRecords) != 0 {
+		panic("")
+	}
+}
+
 func buildAndSendTransferTx(txid, covenantAddress, receiver, amount string) {
-	out := utils.Execute(config.TxMakerPath, "make-cc-utxo", fmt.Sprintf("--txid=%s", txid),
+	out := utils.Execute(config.TxMakerPath, "make-cc-utxo",
+		fmt.Sprintf("--txid=%s", txid),
 		fmt.Sprintf("--cc-covenant-addr=%s", covenantAddress),
 		fmt.Sprintf("--amt=%s", amount),
 		fmt.Sprintf("--op-return=%s", receiver))
+	//fmt.Printf(out)
+	utils.SendCcTxToFakeNode(out)
+}
+
+func buildAndSendConvertTx(inTxid, txid, covenantAddress, amount string) {
+	out := utils.Execute(config.TxMakerPath, "convert-by-operators",
+		fmt.Sprintf("--txid=%s", txid),
+		fmt.Sprintf("--in-txid=%s", inTxid),
+		"--in-vout=0",
+		fmt.Sprintf("--cc-covenant-addr=%s", covenantAddress),
+		fmt.Sprintf("--amt=%s", amount))
 	//fmt.Printf(out)
 	utils.SendCcTxToFakeNode(out)
 }
