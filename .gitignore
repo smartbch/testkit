@@ -22,3 +22,4 @@ repeatnonce/repeatnonce
 bchnode/fakenode
 bchutxomaker/txmaker
 cctester/build
+node_modules/

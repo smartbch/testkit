@@ -3,13 +3,15 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/smartbch/testkit/cctester/config"
+	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/holiman/uint256"
+
+	"github.com/smartbch/testkit/cctester/config"
 )
 
 func ExecuteWithContinuousOutPut(exe string, params ...string) {
@@ -189,7 +191,7 @@ func GetLatestBlockHeight() string {
 func StartSideChainNode() {
 	sideNodeParams := []string{
 		"start",
-		"--home", "/Users/bear/.smartbchd",
+		"--home", os.ExpandEnv("$HOME/.smartbchd"),
 		"--unlock", "0xe3d9be2e6430a9db8291ab1853f5ec2467822b33a1a08825a22fab1425d2bff9",
 		"--https.addr=off",
 		"--wss.addr=off",

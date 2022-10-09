@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@truffle/contract": "^4.3.9"
+  },
+  "devDependencies": {
+    "@truffle/hdwallet-provider": "^2.0.14"
+  }
+}

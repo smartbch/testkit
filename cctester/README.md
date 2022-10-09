@@ -16,6 +16,8 @@ go build -o txmaker main.go
 
 4. run test
 cd ./../
+npm i
+truffle compile
 go run main.go
 ```
 
