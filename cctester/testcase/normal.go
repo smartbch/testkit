@@ -454,8 +454,14 @@ func buildAndSendConvertTx(inTxid, txid, covenantAddress, amount string) {
 	utils.SendCcTxToFakeNode(out)
 }
 
+func BuildAndSendMainnetRedeemTx(txid string) {
+	buildAndSendMainnetRedeemTx(txid)
+}
 func buildAndSendMainnetRedeemTx(txid string) {
-	out := utils.Execute(config.TxMakerPath, "redeem-cc-utxo", fmt.Sprintf("--in-txid=%s", txid), fmt.Sprintf("--txid=%s", txid), "--in-vout=0")
+	out := utils.Execute(config.TxMakerPath, "redeem-cc-utxo",
+		fmt.Sprintf("--in-txid=%s", txid),
+		fmt.Sprintf("--txid=%s", txid),
+		"--in-vout=0")
 	fmt.Println(out)
 	utils.SendCcTxToFakeNode(out)
 }
