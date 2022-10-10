@@ -121,7 +121,7 @@ func GetRedeemingUTXOs() []*UtxoInfo {
 }
 
 func GetToBeConvertedUTXOs() []*UtxoInfo {
-	args := []string{"-X", "POST", "--data", "{\"jsonrpc\":\"2.0\",\"method\":\"sbch_getToBeConvertedUTXOsForMonitors\",\"params\":[],\"id\":1}", "-H", "Content-Type: application/json", "http://127.0.0.1:8545"}
+	args := []string{"-X", "POST", "--data", "{\"jsonrpc\":\"2.0\",\"method\":\"sbch_getToBeConvertedUtxosForMonitors\",\"params\":[],\"id\":1}", "-H", "Content-Type: application/json", "http://127.0.0.1:8545"}
 	out := Execute("curl", args...)
 	//fmt.Println(out)
 	type serverResponse struct {

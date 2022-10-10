@@ -354,7 +354,7 @@ func TestConvert() {
 	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
 	fmt.Printf("balance: %s\n", receiveAmount.String())
 	if !receiveAmount.Eq(amountInSideChain) {
-		panic("balance not match")
+		panic(fmt.Sprintf("balance not match: %s, %s", receiveAmount.Hex(), amountInSideChain.Hex()))
 	}
 	fmt.Println(`-------------------- send startRescan tx to change covenant address -------------------`)
 	latestSideChainHeight := utils.GetSideChainBlockHeight()
