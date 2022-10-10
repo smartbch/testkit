@@ -22,6 +22,12 @@ func main() {
 	fmt.Println("-------------- start side node --------------")
 	go utils.StartSideChainNode()
 	time.Sleep(10 * time.Second)
+	fmt.Println("-------------- deploy Gov contracts --------------")
+	nodesGovAddr := utils.DeployGovContracts()
+	utils.InitSbchNodesGov(nodesGovAddr)
+	fmt.Println("-------------- start operators --------------")
+	go utils.StartOperators(nodesGovAddr)
+	time.Sleep(10 * time.Second)
 	fmt.Println("-------------- start test --------------")
 	go testcase.Test()
 	select {}

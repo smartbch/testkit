@@ -45,6 +45,18 @@ func Execute(exe string, params ...string) string {
 	return string(out)
 }
 
+func ExecuteGovScript(exe string, params ...string) string {
+	cmd := exec.Command(exe, params...)
+	cmd.Dir = config.CcContractsPath
+	cmd.Env = append(cmd.Env, "HARDHAT_NETWORK=sbch_local")
+	cmd.Env = append(cmd.Env, "KEY=0xa3ff378a8d766931575df674fbb1024f09f7072653e1aa91641f310b3e1c5275")
+	out, err := cmd.Output()
+	if err != nil {
+		panic(err.Error())
+	}
+	return string(out)
+}
+
 func SendCcTxToFakeNode(tx string) {
 	tx = strings.ReplaceAll(tx, "\"", "\\\"")
 	data := fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"method\":\"cc\",\"params\":[\"%s\"],\"id\":1}", tx)
@@ -201,4 +213,50 @@ func StartSideChainNode() {
 		"--with-syncdb=false",
 	}
 	ExecuteWithContinuousOutPut(config.SideNodePath, sideNodeParams...)
+}
+
+func DeployGovContracts() string {
+	output := ExecuteGovScript("node",
+		"scripts/int_test_tool.js",
+		"deploy-gov-contracts")
+	fmt.Println(output)
+
+	// find nodesGovAddr
+	idx := strings.Index(output, "CCNodesGov deployed to: ")
+	if idx < 0 {
+		panic(output)
+	}
+	nodesGovAddr := output[idx+24 : idx+24+42]
+	fmt.Println("nodesGovAddr:", nodesGovAddr)
+	return nodesGovAddr
+}
+
+func InitSbchNodesGov(govAddr string) {
+	output := ExecuteGovScript("node",
+		"scripts/int_test_tool.js",
+		"add-sbchd-node",
+		"--gov="+govAddr,
+		"--rpc-url=http://127.0.0.1:8545",
+		"--cert-url='http://127.0.0.1/cert'", // not used
+		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
+	)
+	fmt.Println(output)
+
+	output = ExecuteGovScript("node",
+		"scripts/int_test_tool.js",
+		"add-sbchd-node",
+		"--gov="+govAddr,
+		"--rpc-url=http://127.0.0.1:8545",
+		"--cert-url='http://127.0.0.1/cert'", // not used
+		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
+	)
+	fmt.Println(output)
+}
+
+func StartOperators(nodesGovAddr string) {
+	ExecuteWithContinuousOutPut(config.OperatorPath,
+		"--listenAddr=0.0.0.0:8801",
+		"--bootstrapRpcURL=http://localhost:8545",
+		"--nodesGovAddr="+nodesGovAddr,
+	)
 }

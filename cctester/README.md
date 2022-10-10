@@ -14,7 +14,15 @@ go build -o fakenode main.go
 cd ./../bchutxomaker
 go build -o txmaker main.go
 
-4. run test
+4. build cc-operator
+cd ./../../cc-operator
+go build -o ccoperator main.go
+
+5. prepare cc-contracts
+cd ./../../cc-contracts
+npm i
+
+6. run test
 cd ./../
 npm i
 truffle compile
