@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,10 +27,14 @@ func ExecuteWithContinuousOutPut(exe string, params ...string) {
 		fmt.Println(err.Error())
 		//panic(err)
 	}
+
+	_, exeFile := path.Split(exe)
 	for {
 		tmp := make([]byte, 1024)
 		_, err := stdout.Read(tmp)
-		fmt.Print(string(tmp))
+		//_out := string(tmp)
+		_out := strings.ReplaceAll(string(tmp), "\n", "\n"+exeFile+": ")
+		fmt.Print(_out)
 		if err != nil {
 			break
 		}
