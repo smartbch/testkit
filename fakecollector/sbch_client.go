@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/rpc"
-
-	sbchrpc "github.com/smartbch/smartbch/rpc/api"
 )
 
 const getTimeout = time.Second * 15
@@ -31,7 +29,7 @@ func NewSbchClient(rpcUrl string) (*SbchClient, error) {
 	}, nil
 }
 
-func (cli *SbchClient) GetCcCovenantInfo() (info sbchrpc.CcCovenantInfo, err error) {
+func (cli *SbchClient) GetCcCovenantInfo() (info CcCovenantInfo, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), getTimeout)
 	defer cancel()
 
@@ -39,7 +37,7 @@ func (cli *SbchClient) GetCcCovenantInfo() (info sbchrpc.CcCovenantInfo, err err
 	return
 }
 
-func (cli *SbchClient) GetRedeemingUtxosForOperators() (utxos []*sbchrpc.UtxoInfo, err error) {
+func (cli *SbchClient) GetRedeemingUtxosForOperators() (utxos []*UtxoInfo, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), getTimeout)
 	defer cancel()
 
@@ -47,7 +45,7 @@ func (cli *SbchClient) GetRedeemingUtxosForOperators() (utxos []*sbchrpc.UtxoInf
 	return
 }
 
-func (cli *SbchClient) GetToBeConvertedUtxosForOperators() (utxos []*sbchrpc.UtxoInfo, err error) {
+func (cli *SbchClient) GetToBeConvertedUtxosForOperators() (utxos []*UtxoInfo, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), getTimeout)
 	defer cancel()
 
@@ -55,14 +53,14 @@ func (cli *SbchClient) GetToBeConvertedUtxosForOperators() (utxos []*sbchrpc.Utx
 	return
 }
 
-func getOperatorPubkeys(operators []sbchrpc.OperatorInfo) [][]byte {
+func getOperatorPubkeys(operators []OperatorInfo) [][]byte {
 	pubkeys := make([][]byte, len(operators))
 	for i, operator := range operators {
 		pubkeys[i] = operator.Pubkey
 	}
 	return pubkeys
 }
-func getMonitorPubkeys(monitors []sbchrpc.MonitorInfo) [][]byte {
+func getMonitorPubkeys(monitors []MonitorInfo) [][]byte {
 	pubkeys := make([][]byte, len(monitors))
 	for i, monitor := range monitors {
 		pubkeys[i] = monitor.Pubkey

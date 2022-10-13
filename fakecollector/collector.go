@@ -8,7 +8,6 @@ import (
 	"time"
 
 	gethcmn "github.com/ethereum/go-ethereum/common"
-	sbchrpc "github.com/smartbch/smartbch/rpc/api"
 	"github.com/smartbch/testkit/cctester/testcase"
 )
 
@@ -49,7 +48,7 @@ func handleAllPendingUTXOs(sbchClient *SbchClient, operatorUrl string) {
 	}
 }
 
-func handleRedeemingUTXO(operatorUrl string, utxo *sbchrpc.UtxoInfo) {
+func handleRedeemingUTXO(operatorUrl string, utxo *UtxoInfo) {
 	sig, err := getSigByHash(operatorUrl, utxo.TxSigHash)
 	if err != nil {
 		fmt.Println("failed to get sig by hash:", err.Error())
@@ -59,7 +58,7 @@ func handleRedeemingUTXO(operatorUrl string, utxo *sbchrpc.UtxoInfo) {
 	testcase.BuildAndSendMainnetRedeemTx(hex.EncodeToString(utxo.Txid[:]))
 }
 
-func handleToBeConvertedUTXO(operatorUrl string, utxo *sbchrpc.UtxoInfo) {
+func handleToBeConvertedUTXO(operatorUrl string, utxo *UtxoInfo) {
 	sig, err := getSigByHash(operatorUrl, utxo.TxSigHash)
 	if err != nil {
 		fmt.Println("failed to get sig by hash:", err.Error())
