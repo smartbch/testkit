@@ -265,3 +265,7 @@ func StartOperators(nodesGovAddr string) {
 		"--nodesGovAddr="+nodesGovAddr,
 	)
 }
+
+func StartFakeCollector() {
+	ExecuteWithContinuousOutPut(config.CollectorPath)
+}

@@ -28,6 +28,9 @@ func main() {
 	fmt.Println("-------------- start operators --------------")
 	go utils.StartOperators(nodesGovAddr)
 	time.Sleep(10 * time.Second)
+	fmt.Println("-------------- start fake collector --------------")
+	go utils.StartFakeCollector()
+	time.Sleep(10 * time.Second)
 	fmt.Println("-------------- start test --------------")
 	go testcase.Test()
 	select {}

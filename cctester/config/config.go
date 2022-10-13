@@ -8,4 +8,5 @@ var (
 	SideNodePath    = BasePath + "smartbch/smartbchd"
 	CcContractsPath = BasePath + "cc-contracts"
 	OperatorPath    = BasePath + "cc-operator/ccoperator"
+	CollectorPath   = BasePath + "testkit/fakecollector/fakecollector"
 )

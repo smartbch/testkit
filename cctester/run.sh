@@ -29,6 +29,12 @@ cd ../bchutxomaker
 go build -o txmaker main.go
 popd
 
+pushd $PWD
+echo 'build fakecollector'
+cd ../fakecollector
+go build -o fakecollector github.com/smartbch/testkit/fakecollector
+popd
+
 # echo 'prepare truffle scripts'
 # npm i
 # truffle compile
@@ -37,6 +43,7 @@ file ../../smartbch/smartbchd
 file ../../cc-operator/ccoperator
 file ../bchnode/fakenode 
 file ../bchutxomaker/txmaker
+file ../fakecollector/fakecollector
 
 echo 'run tests'
 go run main.go
