@@ -347,10 +347,12 @@ func TestConvert() {
 	buildAndSendStartRescanTx()
 	time.Sleep(10 * time.Second)
 	balance := utils.GetAccBalance(receiver)
+	fmt.Printf("balance: %s\n", balance.String())
 	fmt.Println(`-------------------- send handle utxo tx -------------------`)
 	buildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	balance1 := utils.GetAccBalance(receiver)
+	fmt.Printf("balance1: %s\n", balance1.String())
 	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
 	fmt.Printf("balance: %s\n", receiveAmount.String())
 	if !receiveAmount.Eq(amountInSideChain) {
@@ -358,7 +360,7 @@ func TestConvert() {
 	}
 	fmt.Println(`-------------------- send startRescan tx to change covenant address -------------------`)
 	latestSideChainHeight := utils.GetSideChainBlockHeight()
-	for latestSideChainHeight <= 30 {
+	for latestSideChainHeight <= 70 {
 		fmt.Printf("side chain height:%d\n", latestSideChainHeight)
 		time.Sleep(5 * time.Second)
 		latestSideChainHeight = utils.GetSideChainBlockHeight()
@@ -382,7 +384,7 @@ func TestConvert() {
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
 	latestSideChainHeight = utils.GetSideChainBlockHeight()
-	for latestSideChainHeight <= 60 {
+	for latestSideChainHeight <= 100 {
 		fmt.Printf("side chain height:%d\n", latestSideChainHeight)
 		time.Sleep(5 * time.Second)
 		latestSideChainHeight = utils.GetSideChainBlockHeight()
