@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -88,10 +89,19 @@ func getSigByHash(operatorUrl string, txSigHash []byte) ([]byte, error) {
 	}
 
 	defer resp.Body.Close()
-	sig, err := io.ReadAll(resp.Body)
+	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	return gethcmn.FromHex(string(sig)), nil
+	var respJson OperatorResp
+	err = json.Unmarshal(respBytes, &respJson)
+	if err != nil {
+		return nil, err
+	}
+	if respJson.Error != "" {
+		return nil, errors.New(respJson.Error)
+	}
+
+	return gethcmn.FromHex(respJson.Result), nil
 }

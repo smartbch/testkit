@@ -36,3 +36,9 @@ type UtxoInfo struct {
 	Amount           hexutil.Uint64  `json:"amount"` // in satoshi
 	TxSigHash        hexutil.Bytes   `json:"tx_sig_hash"`
 }
+
+type OperatorResp struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+	Result  string `json:"result,omitempty"`
+}
