@@ -19,10 +19,12 @@ type MonitorInfo struct {
 }
 
 type CcCovenantInfo struct {
-	Operators    []OperatorInfo `json:"operators"`
-	Monitors     []MonitorInfo  `json:"monitors"`
-	OldOperators []OperatorInfo `json:"old_operators"`
-	OldMonitors  []MonitorInfo  `json:"old_monitors"`
+	Operators           []OperatorInfo `json:"operators"`
+	Monitors            []MonitorInfo  `json:"monitors"`
+	OldOperators        []OperatorInfo `json:"old_operators"`
+	OldMonitors         []MonitorInfo  `json:"old_monitors"`
+	LastCovenantAddress string         `json:"lastCovenantAddress"`
+	CurrCovenantAddress string         `json:"currCovenantAddress"`
 }
 
 type UtxoInfo struct {
