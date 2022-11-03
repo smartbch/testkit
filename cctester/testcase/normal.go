@@ -9,7 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/holiman/uint256"
 
-	"github.com/smartbch/testkit/cctester/config"
 	"github.com/smartbch/testkit/cctester/utils"
 )
 
@@ -42,14 +41,14 @@ func TestRedeemableWithBelowMinAmount() {
 	var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e7), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
-	buildAndSendTransferTx(txid, covenantAddress, receiver, amount)
+	utils.BuildAndSendTransferTx(txid, covenantAddress, receiver, amount)
 	time.Sleep(5 * time.Second)
 	fmt.Println(`-------------------- send startRescan tx -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(10 * time.Second)
 	balance := utils.GetAccBalance(receiver)
 	fmt.Println(`-------------------- send handle utxo tx -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(5 * time.Second)
 	balance1 := utils.GetAccBalance(receiver)
 	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
@@ -75,13 +74,13 @@ func TestRedeemableWithBelowMinAmount() {
 		panic("")
 	}
 	fmt.Println(`--------------------- send main chain redeem tx -------------------`)
-	//buildAndSendMainnetRedeemTx(txid[2:])
+	//utils.BuildAndSendMainnetRedeemTx(txid[2:])
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(15 * time.Second)
 	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	utxoRecords = utils.GetRedeemingUTXOs()
 	if len(utxoRecords) != 0 {
@@ -98,14 +97,14 @@ func TestLostAndFoundWithAboveMaxAmount() {
 	//var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e7), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
-	buildAndSendTransferTx(txid, covenantAddress, receiver, amount)
+	utils.BuildAndSendTransferTx(txid, covenantAddress, receiver, amount)
 	time.Sleep(5 * time.Second)
 	fmt.Println(`-------------------- send startRescan tx -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(10 * time.Second)
 	balance := utils.GetAccBalance(receiver)
 	fmt.Println(`-------------------- send handle utxo tx -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	balance1 := utils.GetAccBalance(receiver)
 	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
@@ -114,7 +113,7 @@ func TestLostAndFoundWithAboveMaxAmount() {
 		panic("receive amount should be zero")
 	}
 	fmt.Println(`-------------------- send redeem tx -------------------`)
-	buildAndSendRedeemTx(txid, receiver, "0")
+	utils.BuildAndSendRedeemTx(txid, receiver, "0")
 	time.Sleep(4 * time.Second)
 	balance2 := utils.GetAccBalance(receiver)
 	burnAmount := uint256.NewInt(0).Sub(balance1, uint256.NewInt(0).Add(balance2, normalGasFee))
@@ -138,13 +137,13 @@ func TestLostAndFoundWithAboveMaxAmount() {
 		panic("")
 	}
 	fmt.Println(`--------------------- send main chain redeem tx -------------------`)
-	//buildAndSendMainnetRedeemTx(txid[2:])
+	//utils.BuildAndSendMainnetRedeemTx(txid[2:])
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(10 * time.Second)
 	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(5 * time.Second)
 	utxoRecords = utils.GetRedeemingUTXOs()
 	if len(utxoRecords) != 0 {
@@ -160,14 +159,14 @@ func TestLostAndFoundWithBelowMinAmount() {
 	//var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e7), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
-	buildAndSendTransferTx(txid, covenantAddress, receiver, amount)
+	utils.BuildAndSendTransferTx(txid, covenantAddress, receiver, amount)
 	time.Sleep(5 * time.Second)
 	fmt.Println(`-------------------- send startRescan tx -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(10 * time.Second)
 	balance := utils.GetAccBalance(receiver)
 	fmt.Println(`-------------------- send handle utxo tx -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(5 * time.Second)
 	balance1 := utils.GetAccBalance(receiver)
 	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
@@ -176,7 +175,7 @@ func TestLostAndFoundWithBelowMinAmount() {
 		panic("receive amount should be zero")
 	}
 	fmt.Println(`-------------------- send redeem tx -------------------`)
-	buildAndSendRedeemTx(txid, receiver, "0")
+	utils.BuildAndSendRedeemTx(txid, receiver, "0")
 	time.Sleep(4 * time.Second)
 	balance2 := utils.GetAccBalance(receiver)
 	burnAmount := uint256.NewInt(0).Sub(balance1, uint256.NewInt(0).Add(balance2, normalGasFee))
@@ -200,13 +199,13 @@ func TestLostAndFoundWithBelowMinAmount() {
 		panic("")
 	}
 	fmt.Println(`--------------------- send main chain redeem tx -------------------`)
-	//buildAndSendMainnetRedeemTx(txid[2:])
+	//utils.BuildAndSendMainnetRedeemTx(txid[2:])
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(15 * time.Second)
 	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	utxoRecords = utils.GetRedeemingUTXOs()
 	if len(utxoRecords) != 0 {
@@ -222,14 +221,14 @@ func TestLostAndFoundWithOldCovenantAddress() {
 	var lastCovenantAddress = "0x0000000000000000000000000000000000000001"
 
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
-	buildAndSendTransferTx(txid, lastCovenantAddress, receiver, amount)
+	utils.BuildAndSendTransferTx(txid, lastCovenantAddress, receiver, amount)
 	time.Sleep(5 * time.Second)
 	fmt.Println(`-------------------- send startRescan tx -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(15 * time.Second)
 	balance := utils.GetAccBalance(receiver)
 	fmt.Println(`-------------------- send handle utxo tx -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	balance1 := utils.GetAccBalance(receiver)
 	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
@@ -238,7 +237,7 @@ func TestLostAndFoundWithOldCovenantAddress() {
 		panic("receive amount should be zero")
 	}
 	fmt.Println(`-------------------- send redeem tx -------------------`)
-	buildAndSendRedeemTx(txid, receiver, "0")
+	utils.BuildAndSendRedeemTx(txid, receiver, "0")
 	time.Sleep(4 * time.Second)
 	balance2 := utils.GetAccBalance(receiver)
 	burnAmount := uint256.NewInt(0).Sub(balance1, uint256.NewInt(0).Add(balance2, normalGasFee))
@@ -259,13 +258,13 @@ func TestLostAndFoundWithOldCovenantAddress() {
 		panic("")
 	}
 	fmt.Println(`--------------------- send main chain redeem tx -------------------`)
-	//buildAndSendMainnetRedeemTx(txid[2:])
+	//utils.BuildAndSendMainnetRedeemTx(txid[2:])
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(15 * time.Second)
 	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	utxoRecords = utils.GetRedeemingUTXOs()
 	if len(utxoRecords) != 0 {
@@ -281,14 +280,14 @@ func TestNormal() {
 	var amountInSideChain = uint256.NewInt(0).Mul(uint256.NewInt(1e8), uint256.NewInt(1e10))
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
-	buildAndSendTransferTx(txid, covenantAddress, receiver, amount)
+	utils.BuildAndSendTransferTx(txid, covenantAddress, receiver, amount)
 	time.Sleep(5 * time.Second)
 	fmt.Println(`-------------------- send startRescan tx -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(10 * time.Second)
 	balance := utils.GetAccBalance(receiver)
 	fmt.Println(`-------------------- send handle utxo tx -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	balance1 := utils.GetAccBalance(receiver)
 	receiveAmount := uint256.NewInt(0).Sub(uint256.NewInt(0).Add(balance1, normalGasFee), balance)
@@ -297,7 +296,7 @@ func TestNormal() {
 		panic("balance not match")
 	}
 	fmt.Println(`-------------------- send redeem tx -------------------`)
-	buildAndSendRedeemTx(txid, receiver, "1000000000000000000")
+	utils.BuildAndSendRedeemTx(txid, receiver, "1000000000000000000")
 	time.Sleep(6 * time.Second)
 	balance2 := utils.GetAccBalance(receiver)
 	burnAddress := uint256.NewInt(0).Sub(balance1, uint256.NewInt(0).Add(balance2, normalGasFee))
@@ -313,13 +312,13 @@ func TestNormal() {
 		panic("")
 	}
 	fmt.Println(`--------------------- send main chain redeem tx -------------------`)
-	//buildAndSendMainnetRedeemTx(txid[2:])
+	//utils.BuildAndSendMainnetRedeemTx(txid[2:])
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(15 * time.Second)
 	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	utxoRecords = utils.GetRedeemingUTXOs()
 	if len(utxoRecords) != 0 {
@@ -341,15 +340,15 @@ func TestConvert() {
 
 	var normalGasFee = uint256.NewInt(0).Mul(uint256.NewInt(4000000) /*gas*/, uint256.NewInt(20000000000) /*gas price*/)
 	fmt.Println(`-------------------- send cc transfer tx -------------------`)
-	buildAndSendTransferTx(txid, covenantAddress, receiver, amount)
+	utils.BuildAndSendTransferTx(txid, covenantAddress, receiver, amount)
 	time.Sleep(5 * time.Second)
 	fmt.Println(`-------------------- send startRescan tx -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(10 * time.Second)
 	balance := utils.GetAccBalance(receiver)
 	fmt.Printf("balance: %s\n", balance.String())
 	fmt.Println(`-------------------- send handle utxo tx -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	balance1 := utils.GetAccBalance(receiver)
 	fmt.Printf("balance1: %s\n", balance1.String())
@@ -365,7 +364,7 @@ func TestConvert() {
 		time.Sleep(5 * time.Second)
 		latestSideChainHeight = utils.GetSideChainBlockHeight()
 	}
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(6 * time.Second)
 	fmt.Println(`-------------------- check utxo record from rpc -------------------`)
 	utxoRecords := utils.GetRedeemingUTXOs()
@@ -380,7 +379,7 @@ func TestConvert() {
 		panic("")
 	}
 	fmt.Println(`--------------------- send main chain convert tx -------------------`)
-	//buildAndSendConvertTx(txid[2:], newTxid[2:], newCovenantAddress, newAmount)
+	//utils.BuildAndSendConvertTx(txid[2:], newTxid[2:], newCovenantAddress, newAmount)
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
 	latestSideChainHeight = utils.GetSideChainBlockHeight()
@@ -389,10 +388,10 @@ func TestConvert() {
 		time.Sleep(5 * time.Second)
 		latestSideChainHeight = utils.GetSideChainBlockHeight()
 	}
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(15 * time.Second)
 	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	utxoRecords = utils.GetRedeemingUTXOs()
 	if len(utxoRecords) != 0 {
@@ -405,7 +404,7 @@ func TestConvert() {
 		panic("")
 	}
 	newTxid := redeemableUtxoRecords[0].Txid.String()
-	buildAndSendRedeemTx(newTxid, receiver, "999900000000000000")
+	utils.BuildAndSendRedeemTx(newTxid, receiver, "999900000000000000")
 	time.Sleep(4 * time.Second)
 	balance3 := utils.GetAccBalance(receiver)
 	burnAddress := uint256.NewInt(0).Sub(balance2, uint256.NewInt(0).Add(balance3, normalGasFee))
@@ -426,78 +425,16 @@ func TestConvert() {
 		panic("")
 	}
 	fmt.Println(`--------------------- send main chain redeem tx -------------------`)
-	//buildAndSendMainnetRedeemTx(newTxid[2:])
+	//utils.BuildAndSendMainnetRedeemTx(newTxid[2:])
 	time.Sleep(5 * time.Second)
 	fmt.Println(`--------------------- send startRescan tx second time -------------------`)
-	buildAndSendStartRescanTx()
+	utils.BuildAndSendStartRescanTx()
 	time.Sleep(15 * time.Second)
 	fmt.Println(`--------------------- send handle utxo tx second time -------------------`)
-	buildAndSendHandleUTXOTx()
+	utils.BuildAndSendHandleUTXOTx()
 	time.Sleep(4 * time.Second)
 	utxoRecords = utils.GetRedeemingUTXOs()
 	if len(utxoRecords) != 0 {
 		panic("")
 	}
-}
-
-func buildAndSendTransferTx(txid, covenantAddress, receiver, amount string) {
-	out := utils.Execute(config.TxMakerPath, "make-cc-utxo",
-		fmt.Sprintf("--txid=%s", txid),
-		fmt.Sprintf("--cc-covenant-addr=%s", covenantAddress),
-		fmt.Sprintf("--amt=%s", amount),
-		fmt.Sprintf("--op-return=%s", receiver))
-	//fmt.Printf(out)
-	utils.SendCcTxToFakeNode(out)
-}
-
-func BuildAndSendMainnetConvertTx(inTxid, txid, covenantAddress, amount string) {
-	buildAndSendConvertTx(inTxid, txid, covenantAddress, amount)
-}
-
-func buildAndSendConvertTx(inTxid, txid, covenantAddress, amount string) {
-	if strings.HasPrefix(inTxid, "0x") {
-		inTxid = inTxid[2:]
-	}
-	if strings.HasPrefix(txid, "0x") {
-		txid = txid[2:]
-	}
-	fmt.Println("txid in testcase:", txid)
-	out := utils.Execute(config.TxMakerPath, "convert-by-operators",
-		fmt.Sprintf("--txid=%s", txid),
-		fmt.Sprintf("--in-txid=%s", inTxid),
-		"--in-vout=0",
-		fmt.Sprintf("--cc-covenant-addr=%s", covenantAddress),
-		fmt.Sprintf("--amt=%s", amount))
-	//fmt.Printf(out)
-	utils.SendCcTxToFakeNode(out)
-}
-
-func BuildAndSendMainnetRedeemTx(txid string) {
-	if strings.HasPrefix(txid, "0x") {
-		txid = txid[2:]
-	}
-	buildAndSendMainnetRedeemTx(txid)
-}
-
-func buildAndSendMainnetRedeemTx(txid string) {
-	out := utils.Execute(config.TxMakerPath, "redeem-cc-utxo",
-		fmt.Sprintf("--in-txid=%s", txid),
-		fmt.Sprintf("--txid=%s", txid),
-		"--in-vout=0")
-	fmt.Println(out)
-	utils.SendCcTxToFakeNode(out)
-}
-
-func buildAndSendStartRescanTx() {
-	height := utils.GetLatestBlockHeight()
-	fmt.Println(height)
-	utils.StartRescan(height)
-}
-
-func buildAndSendHandleUTXOTx() {
-	utils.HandleCCUTXOs()
-}
-
-func buildAndSendRedeemTx(txid, receiver, amount string) {
-	utils.Redeem(txid, receiver, amount)
 }

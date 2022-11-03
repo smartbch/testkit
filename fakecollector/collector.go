@@ -12,7 +12,8 @@ import (
 	"time"
 
 	gethcmn "github.com/ethereum/go-ethereum/common"
-	"github.com/smartbch/testkit/cctester/testcase"
+	"github.com/smartbch/smartbch/rpc/types"
+	"github.com/smartbch/testkit/cctester/utils"
 )
 
 var redeemUtxoCache map[[32]byte]bool
@@ -43,8 +44,8 @@ func handleAllPendingUTXOs(sbchClient *SbchClient, operatorUrl string) {
 	}
 	//utxosJson, _ := json.MarshalIndent(redeemingUtxos, "", "  ")
 	//fmt.Println("UTXOS:", string(utxosJson))
-	if len(redeemingUtxos) > 0 {
-		for _, utxo := range redeemingUtxos {
+	if len(redeemingUtxos.Infos) > 0 {
+		for _, utxo := range redeemingUtxos.Infos {
 			handleRedeemingUTXO(operatorUrl, utxo)
 		}
 	}
@@ -56,18 +57,18 @@ func handleAllPendingUTXOs(sbchClient *SbchClient, operatorUrl string) {
 	}
 	//utxosJson, _ = json.MarshalIndent(toBeConvertedUtxos, "", "  ")
 	//fmt.Println("UTXOS:", string(utxosJson))
-	if len(toBeConvertedUtxos) > 0 {
-		ccInfo, err := sbchClient.GetCcCovenantInfo()
+	if len(toBeConvertedUtxos.Infos) > 0 {
+		ccInfo, err := sbchClient.GetCcInfo()
 		if err != nil {
 			fmt.Println("failed to get ccCovenantInfo:", err.Error())
 		}
-		for _, utxo := range toBeConvertedUtxos {
+		for _, utxo := range toBeConvertedUtxos.Infos {
 			handleToBeConvertedUTXO(ccInfo, operatorUrl, utxo)
 		}
 	}
 }
 
-func handleRedeemingUTXO(operatorUrl string, utxo *UtxoInfo) {
+func handleRedeemingUTXO(operatorUrl string, utxo *types.UtxoInfo) {
 	out, err := json.Marshal(utxo)
 	hash := sha256.Sum256(out)
 	if _, exist := redeemUtxoCache[hash]; exist {
@@ -81,11 +82,11 @@ func handleRedeemingUTXO(operatorUrl string, utxo *UtxoInfo) {
 		sig, err = getSigByHash(operatorUrl, utxo.TxSigHash)
 	}
 	fmt.Printf("handleRedeemingUTXO, txid:%s, txSigHash:%s, sig:%s\n", utxo.Txid.String(), utxo.TxSigHash.String(), hex.EncodeToString(sig))
-	testcase.BuildAndSendMainnetRedeemTx(hex.EncodeToString(utxo.Txid[:]))
+	utils.BuildAndSendMainnetRedeemTx(hex.EncodeToString(utxo.Txid[:]))
 	redeemUtxoCache[hash] = true
 }
 
-func handleToBeConvertedUTXO(info CcCovenantInfo, operatorUrl string, utxo *UtxoInfo) {
+func handleToBeConvertedUTXO(info *types.CcInfo, operatorUrl string, utxo *types.UtxoInfo) {
 	out, err := json.Marshal(utxo)
 	hash := sha256.Sum256(out)
 	if _, exist := convertUtxoCache[hash]; exist {
@@ -102,7 +103,7 @@ func handleToBeConvertedUTXO(info CcCovenantInfo, operatorUrl string, utxo *Utxo
 	rand.Read(txidB[:])
 	txid := gethcmn.Hash(txidB)
 	fmt.Printf("handleRedeemingUTXO, txid:%s, txSigHash:%s, sig:%s, inTxid:%s\n", txid.String(), utxo.TxSigHash.String(), hex.EncodeToString(sig), utxo.Txid.String())
-	testcase.BuildAndSendMainnetConvertTx(utxo.Txid.String(), txid.String(), info.CurrCovenantAddress, "0.9999" /*hard code*/)
+	utils.BuildAndSendConvertTx(utxo.Txid.String(), txid.String(), info.CurrCovenantAddress, "0.9999" /*hard code*/)
 	convertUtxoCache[hash] = true
 }
 

@@ -4,53 +4,39 @@ import (
 	"context"
 	"time"
 
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/smartbch/smartbch/rpc/client"
+	"github.com/smartbch/smartbch/rpc/types"
 )
 
 const getTimeout = time.Second * 15
 
 type SbchClient struct {
-	url    string
-	rpcCli *rpc.Client
-	//ethCli *ethclient.Client
+	url string
+	cli *client.Client
 }
 
 func NewSbchClient(rpcUrl string) (*SbchClient, error) {
-	rpcCli, err := rpc.DialContext(context.Background(), rpcUrl)
+	rpcCli, err := client.Dial(rpcUrl)
 	if err != nil {
 		return nil, err
 	}
-	//ethCli := ethclient.NewClient(rpcCli)
 
 	return &SbchClient{
-		url:    rpcUrl,
-		rpcCli: rpcCli,
-		//ethCli: ethCli,
+		url: rpcUrl,
+		cli: rpcCli,
 	}, nil
 }
 
-func (cli *SbchClient) GetCcCovenantInfo() (info CcCovenantInfo, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), getTimeout)
-	defer cancel()
-
-	err = cli.rpcCli.CallContext(ctx, &info, "sbch_getCcCovenantInfo")
-	return
+func (s *SbchClient) GetCcInfo() (*types.CcInfo, error) {
+	return s.cli.CcInfo(context.Background())
 }
 
-func (cli *SbchClient) GetRedeemingUtxosForOperators() (utxos []*UtxoInfo, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), getTimeout)
-	defer cancel()
-
-	err = cli.rpcCli.CallContext(ctx, &utxos, "sbch_getRedeemingUtxosForOperators")
-	return
+func (s *SbchClient) GetRedeemingUtxosForOperators() (utxos *types.UtxoInfos, err error) {
+	return s.cli.RedeemingUtxosForOperators(context.Background())
 }
 
-func (cli *SbchClient) GetToBeConvertedUtxosForOperators() (utxos []*UtxoInfo, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), getTimeout)
-	defer cancel()
-
-	err = cli.rpcCli.CallContext(ctx, &utxos, "sbch_getToBeConvertedUtxosForOperators")
-	return
+func (s *SbchClient) GetToBeConvertedUtxosForOperators() (utxos *types.UtxoInfos, err error) {
+	return s.cli.ToBeConvertedUtxosForOperators(context.Background())
 }
 
 func getOperatorPubkeys(operators []OperatorInfo) [][]byte {

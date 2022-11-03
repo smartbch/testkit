@@ -50,6 +50,58 @@ func Execute(exe string, params ...string) string {
 	return string(out)
 }
 
+func StartSideChainNode() {
+	sideNodeParams := []string{
+		"start",
+		"--home", os.ExpandEnv("$HOME/.smartbchd"),
+		"--unlock", "0xe3d9be2e6430a9db8291ab1853f5ec2467822b33a1a08825a22fab1425d2bff9",
+		"--https.addr=off",
+		"--wss.addr=off",
+		"--http.api=eth,web3,net,txpool,sbch,debug",
+		"--log_level=json-rpc:debug,watcher:debug,app:debug",
+		"--skip-sanity-check=true",
+		"--with-syncdb=false",
+	}
+	ExecuteWithContinuousOutPut(config.SideNodePath, sideNodeParams...)
+}
+
+func SetRpcKey(key string) {
+	args := []string{"-X", "POST", "--data", fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"method\":\"sbch_setRpcKey\",\"params\":[\"%s\"],\"id\":1}", key), "-H", "Content-Type: application/json", "http://127.0.0.1:8545"}
+	out := Execute("curl", args...)
+	//fmt.Println(out)
+	type serverResponse struct {
+		Result interface{}      `json:"result"`
+		Error  interface{}      `json:"error"`
+		Id     *json.RawMessage `json:"id"`
+	}
+	var res serverResponse
+	fmt.Println(out)
+	err := json.Unmarshal([]byte(out), &res)
+	if err != nil {
+		panic(err)
+	}
+	if res.Error != nil {
+		panic(res.Error)
+	}
+	return
+}
+
+func DeployGovContracts() string {
+	output := ExecuteGovScript("node",
+		"scripts/int_test_tool.js",
+		"deploy-gov-contracts")
+	fmt.Println(output)
+
+	// find nodesGovAddr
+	idx := strings.Index(output, "CCNodesGov deployed to: ")
+	if idx < 0 {
+		panic(output)
+	}
+	nodesGovAddr := output[idx+24 : idx+24+42]
+	fmt.Println("nodesGovAddr:", nodesGovAddr)
+	return nodesGovAddr
+}
+
 func ExecuteGovScript(exe string, params ...string) string {
 	cmd := exec.Command(exe, params...)
 	cmd.Dir = config.CcContractsPath
@@ -60,6 +112,40 @@ func ExecuteGovScript(exe string, params ...string) string {
 		panic(err.Error())
 	}
 	return string(out)
+}
+
+func InitSbchNodesGov(govAddr string) {
+	output := ExecuteGovScript("node",
+		"scripts/int_test_tool.js",
+		"add-sbchd-node",
+		"--gov="+govAddr,
+		"--rpc-url=http://127.0.0.1:8545",
+		"--cert-url='http://127.0.0.1/cert'", // not used
+		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
+	)
+	fmt.Println(output)
+
+	output = ExecuteGovScript("node",
+		"scripts/int_test_tool.js",
+		"add-sbchd-node",
+		"--gov="+govAddr,
+		"--rpc-url=http://127.0.0.1:8545",
+		"--cert-url='http://127.0.0.1/cert'", // not used
+		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
+	)
+	fmt.Println(output)
+}
+
+func StartOperators(nodesGovAddr string) {
+	ExecuteWithContinuousOutPut(config.OperatorPath,
+		"--listenAddr=0.0.0.0:8801",
+		"--bootstrapRpcURL=http://localhost:8545",
+		"--nodesGovAddr="+nodesGovAddr,
+	)
+}
+
+func StartFakeCollector() {
+	ExecuteWithContinuousOutPut(config.CollectorPath)
 }
 
 func SendCcTxToFakeNode(tx string) {
@@ -82,26 +168,77 @@ func StartRescan(mainHeight string) {
 	ExecuteWithContinuousOutPut("truffle", args...)
 }
 
-func HandleCCUTXOs() {
+func BuildAndSendHandleUTXOTx() {
 	args := []string{"exec", "scripts/handleutxo.js", "--network=sbch_local"}
 	ExecuteWithContinuousOutPut("truffle", args...)
 }
 
-func Redeem(txid, receiver, amount string) {
+func BuildAndSendRedeemTx(txid, receiver, amount string) {
 	args := []string{"exec", "scripts/redeem.js", "--network=sbch_local", txid, "0", receiver, amount}
 	ExecuteWithContinuousOutPut("truffle", args...)
 }
 
+func BuildAndSendStartRescanTx() {
+	height := GetLatestMainnetBlockHeight()
+	fmt.Println(height)
+	StartRescan(height)
+}
+
+func BuildAndSendMainnetRedeemTx(txid string) {
+	if strings.HasPrefix(txid, "0x") {
+		txid = txid[2:]
+	}
+	out := Execute(config.TxMakerPath, "redeem-cc-utxo",
+		fmt.Sprintf("--in-txid=%s", txid),
+		fmt.Sprintf("--txid=%s", txid),
+		"--in-vout=0")
+	fmt.Println(out)
+	SendCcTxToFakeNode(out)
+}
+
+func BuildAndSendConvertTx(inTxid, txid, covenantAddress, amount string) {
+	if strings.HasPrefix(inTxid, "0x") {
+		inTxid = inTxid[2:]
+	}
+	if strings.HasPrefix(txid, "0x") {
+		txid = txid[2:]
+	}
+	fmt.Println("txid in testcase:", txid)
+	out := Execute(config.TxMakerPath, "convert-by-operators",
+		fmt.Sprintf("--txid=%s", txid),
+		fmt.Sprintf("--in-txid=%s", inTxid),
+		"--in-vout=0",
+		fmt.Sprintf("--cc-covenant-addr=%s", covenantAddress),
+		fmt.Sprintf("--amt=%s", amount))
+	//fmt.Printf(out)
+	SendCcTxToFakeNode(out)
+}
+
+func BuildAndSendTransferTx(txid, covenantAddress, receiver, amount string) {
+	out := Execute(config.TxMakerPath, "make-cc-utxo",
+		fmt.Sprintf("--txid=%s", txid),
+		fmt.Sprintf("--cc-covenant-addr=%s", covenantAddress),
+		fmt.Sprintf("--amt=%s", amount),
+		fmt.Sprintf("--op-return=%s", receiver))
+	//fmt.Printf(out)
+	SendCcTxToFakeNode(out)
+}
+
 type UtxoInfo struct {
-	OwnerOfLost      common.Address `json:"owner_of_lost"`
-	CovenantAddr     common.Address `json:"covenant_addr"`
-	IsRedeemed       bool           `json:"is_redeemed"`
-	RedeemTarget     common.Address `json:"redeem_target"`
-	ExpectedSignTime int64          `json:"expected_sign_time"`
+	OwnerOfLost      common.Address `json:"ownerOfLost"`
+	CovenantAddr     common.Address `json:"covenantAddr"`
+	IsRedeemed       bool           `json:"isRedeemed"`
+	RedeemTarget     common.Address `json:"redeemTarget"`
+	ExpectedSignTime int64          `json:"expectedSignTime"`
 	Txid             common.Hash    `json:"txid"`
 	Index            uint32         `json:"index"`
 	Amount           hexutil.Uint64 `json:"amount"` // in satoshi
-	TxSigHash        hexutil.Bytes  `json:"tx_sig_hash"`
+	TxSigHash        hexutil.Bytes  `json:"txSigHash"`
+}
+
+type UtxoInfos struct {
+	Infos     []*UtxoInfo   `json:"infos"`
+	Signature hexutil.Bytes `json:"signature"`
 }
 
 func GetRedeemingUTXOs() []*UtxoInfo {
@@ -109,7 +246,7 @@ func GetRedeemingUTXOs() []*UtxoInfo {
 	out := Execute("curl", args...)
 	//fmt.Println(out)
 	type serverResponse struct {
-		Result []*UtxoInfo      `json:"result"`
+		Result *UtxoInfos       `json:"result"`
 		Error  interface{}      `json:"error"`
 		Id     *json.RawMessage `json:"id"`
 	}
@@ -122,7 +259,7 @@ func GetRedeemingUTXOs() []*UtxoInfo {
 	if res.Error != nil {
 		panic(res.Error)
 	}
-	return res.Result
+	return res.Result.Infos
 }
 
 func GetRedeemableUTXOs() []*UtxoInfo {
@@ -130,7 +267,7 @@ func GetRedeemableUTXOs() []*UtxoInfo {
 	out := Execute("curl", args...)
 	//fmt.Println(out)
 	type serverResponse struct {
-		Result []*UtxoInfo      `json:"result"`
+		Result *UtxoInfos       `json:"result"`
 		Error  interface{}      `json:"error"`
 		Id     *json.RawMessage `json:"id"`
 	}
@@ -143,7 +280,7 @@ func GetRedeemableUTXOs() []*UtxoInfo {
 	if res.Error != nil {
 		panic(res.Error)
 	}
-	return res.Result
+	return res.Result.Infos
 }
 
 func GetToBeConvertedUTXOs() []*UtxoInfo {
@@ -151,7 +288,7 @@ func GetToBeConvertedUTXOs() []*UtxoInfo {
 	out := Execute("curl", args...)
 	//fmt.Println(out)
 	type serverResponse struct {
-		Result []*UtxoInfo      `json:"result"`
+		Result *UtxoInfos       `json:"result"`
 		Error  interface{}      `json:"error"`
 		Id     *json.RawMessage `json:"id"`
 	}
@@ -164,7 +301,7 @@ func GetToBeConvertedUTXOs() []*UtxoInfo {
 	if res.Error != nil {
 		panic(res.Error)
 	}
-	return res.Result
+	return res.Result.Infos
 }
 
 func GetAccBalance(address string) *uint256.Int {
@@ -209,7 +346,7 @@ func GetSideChainBlockHeight() uint64 {
 	return balance
 }
 
-func GetLatestBlockHeight() string {
+func GetLatestMainnetBlockHeight() string {
 	args := []string{"-X", "POST", "--data", "{\"jsonrpc\":\"2.0\",\"method\":\"getblockcount\",\"params\":[],\"id\":1}", "-H", "Content-Type: application/json", "http://127.0.0.1:1234", "-v"}
 	out := Execute("curl", args...)
 	//fmt.Println(out)
@@ -226,67 +363,15 @@ func GetLatestBlockHeight() string {
 	return fmt.Sprintf("%d", int64(res.Result))
 }
 
-func StartSideChainNode() {
-	sideNodeParams := []string{
-		"start",
-		"--home", os.ExpandEnv("$HOME/.smartbchd"),
-		"--unlock", "0xe3d9be2e6430a9db8291ab1853f5ec2467822b33a1a08825a22fab1425d2bff9",
-		"--https.addr=off",
-		"--wss.addr=off",
-		"--http.api=eth,web3,net,txpool,sbch,debug",
-		"--log_level=json-rpc:debug,watcher:debug,app:debug",
-		"--skip-sanity-check=true",
-		"--with-syncdb=false",
-	}
-	ExecuteWithContinuousOutPut(config.SideNodePath, sideNodeParams...)
+type OperatorInfo struct {
+	Address common.Address `json:"address"`
+	Pubkey  hexutil.Bytes  `json:"pubkey"`
+	RpcUrl  string         `json:"rpc_url"`
+	Intro   string         `json:"intro"`
 }
 
-func DeployGovContracts() string {
-	output := ExecuteGovScript("node",
-		"scripts/int_test_tool.js",
-		"deploy-gov-contracts")
-	fmt.Println(output)
-
-	// find nodesGovAddr
-	idx := strings.Index(output, "CCNodesGov deployed to: ")
-	if idx < 0 {
-		panic(output)
-	}
-	nodesGovAddr := output[idx+24 : idx+24+42]
-	fmt.Println("nodesGovAddr:", nodesGovAddr)
-	return nodesGovAddr
-}
-
-func InitSbchNodesGov(govAddr string) {
-	output := ExecuteGovScript("node",
-		"scripts/int_test_tool.js",
-		"add-sbchd-node",
-		"--gov="+govAddr,
-		"--rpc-url=http://127.0.0.1:8545",
-		"--cert-url='http://127.0.0.1/cert'", // not used
-		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
-	)
-	fmt.Println(output)
-
-	output = ExecuteGovScript("node",
-		"scripts/int_test_tool.js",
-		"add-sbchd-node",
-		"--gov="+govAddr,
-		"--rpc-url=http://127.0.0.1:8545",
-		"--cert-url='http://127.0.0.1/cert'", // not used
-		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
-	)
-	fmt.Println(output)
-}
-
-func StartOperators(nodesGovAddr string) {
-	ExecuteWithContinuousOutPut(config.OperatorPath,
-		"--listenAddr=0.0.0.0:8801",
-		"--bootstrapRpcURL=http://localhost:8545",
-		"--nodesGovAddr="+nodesGovAddr,
-	)
-}
-
-func StartFakeCollector() {
-	ExecuteWithContinuousOutPut(config.CollectorPath)
+type MonitorInfo struct {
+	Address common.Address `json:"address"`
+	Pubkey  hexutil.Bytes  `json:"pubkey"`
+	Intro   string         `json:"intro"`
 }

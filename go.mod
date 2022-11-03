@@ -8,9 +8,9 @@ require (
 	github.com/gorilla/rpc v1.2.0
 	github.com/holiman/uint256 v1.2.0
 	github.com/smartbch/moeingads v0.4.2
-	github.com/smartbch/moeingdb v0.4.4-0.20220901031017-07b13bf12c62
+	github.com/smartbch/moeingdb v0.4.4-0.20220927004455-2b80890c2704
 	github.com/smartbch/moeingevm v0.4.2-0.20220509120345-27a3d288346f
-	github.com/smartbch/smartbch v0.4.5-0.20220929093626-da9ac9702d77
+	github.com/smartbch/smartbch v0.4.5-0.20221103013626-a5a3aa66e6c4
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.7.0
@@ -107,5 +107,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
-
-//replace github.com/smartbch/smartbch => ../smartbch
