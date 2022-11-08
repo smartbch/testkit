@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -110,7 +111,8 @@ func handleToBeConvertedUTXO(info *types.CcInfo, operatorUrl string, utxo *types
 func getSigByHash(operatorUrl string, txSigHash []byte) ([]byte, error) {
 	fullUrl := operatorUrl + "/sig?hash=" + hex.EncodeToString(txSigHash)
 	fmt.Println("getSigByHash:", fullUrl)
-	resp, err := http.Get(fullUrl)
+	client := http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, Timeout: 3 * time.Second}
+	resp, err := client.Get(fullUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +122,6 @@ func getSigByHash(operatorUrl string, txSigHash []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	var respJson OperatorResp
 	err = json.Unmarshal(respBytes, &respJson)
 	if err != nil {

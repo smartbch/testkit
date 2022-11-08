@@ -397,12 +397,12 @@ func TestConvert() {
 	if len(utxoRecords) != 0 {
 		panic("")
 	}
-	fmt.Println(`-------------------- send redeem tx second time -------------------`)
 	balance2 := utils.GetAccBalance(receiver)
 	redeemableUtxoRecords := utils.GetRedeemableUTXOs()
 	if len(redeemableUtxoRecords) != 1 {
 		panic("")
 	}
+	fmt.Println(`-------------------- send redeem tx second time -------------------`)
 	newTxid := redeemableUtxoRecords[0].Txid.String()
 	utils.BuildAndSendRedeemTx(newTxid, receiver, "999900000000000000")
 	time.Sleep(4 * time.Second)

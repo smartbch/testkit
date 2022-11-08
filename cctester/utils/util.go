@@ -120,8 +120,7 @@ func InitSbchNodesGov(govAddr string) {
 		"add-sbchd-node",
 		"--gov="+govAddr,
 		"--rpc-url=http://127.0.0.1:8545",
-		"--cert-url='http://127.0.0.1/cert'", // not used
-		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
+		"--pbk-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
 	)
 	fmt.Println(output)
 
@@ -130,8 +129,7 @@ func InitSbchNodesGov(govAddr string) {
 		"add-sbchd-node",
 		"--gov="+govAddr,
 		"--rpc-url=http://127.0.0.1:8545",
-		"--cert-url='http://127.0.0.1/cert'", // not used
-		"--cert-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
+		"--pbk-hash=0xd86b49e3424e557beebf67bd06842cdb88e314c44887f3f265b7f81107dd6994", // not used
 	)
 	fmt.Println(output)
 }
