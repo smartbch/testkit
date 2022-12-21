@@ -4,13 +4,15 @@ go 1.18
 
 require (
 	github.com/ethereum/go-ethereum v1.10.7
+	github.com/gcash/bchd v0.19.0
+	github.com/gcash/bchutil v0.0.0-20210113190856-6ea28dff4000
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/rpc v1.2.0
 	github.com/holiman/uint256 v1.2.0
 	github.com/smartbch/moeingads v0.4.2
 	github.com/smartbch/moeingdb v0.4.4-0.20220927004455-2b80890c2704
 	github.com/smartbch/moeingevm v0.4.2-0.20220509120345-27a3d288346f
-	github.com/smartbch/smartbch v0.4.5-0.20221103013626-a5a3aa66e6c4
+	github.com/smartbch/smartbch v0.4.5-0.20221219024420-8cce0cf58d30
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.7.0
@@ -24,6 +26,8 @@ require (
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
+	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
+	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -35,9 +39,7 @@ require (
 	github.com/dterei/gotsc v0.0.0-20160722215413-e78f872945c6 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/gcash/bchd v0.19.0 // indirect
 	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6 // indirect
-	github.com/gcash/bchutil v0.0.0-20210113190856-6ea28dff4000 // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.0 // indirect
 	github.com/go-ole/go-ole v1.2.5 // indirect
