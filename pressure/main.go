@@ -55,8 +55,11 @@ type Sender struct {
 	utxoSeparationMode bool // separation utxo for more utxos
 	redeemAllMode      bool // redeem all redeemable utxo
 
-	totalAmountMainToSide *uint256.Int
-	totalAmountSideToMain *uint256.Int
+	// data for analysis
+	totalTxNumsM2S uint64
+	totalTxNumsS2M uint64
+	totalAmountM2S *uint256.Int
+	totalAmountS2M *uint256.Int
 }
 
 func newSender() *Sender {
@@ -65,12 +68,14 @@ func newSender() *Sender {
 	var wif string
 	var sideChainReceiverK string
 	var utxoSeparationMode bool = false
+	var redeemAllMode bool = false
 
 	flag.StringVar(&mainChainClientInfo, "mainChainClientInfo", mainChainClientInfo, "main chain client info: url,username,password")
 	flag.StringVar(&sideChainUrl, "sideChainUrl", sideChainUrl, "side chain url")
 	flag.StringVar(&wif, "wif", wif, "main chain wif")
 	flag.StringVar(&sideChainReceiverK, "sideChainReceiverKey", sideChainReceiverK, "side chain sender key")
 	flag.BoolVar(&utxoSeparationMode, "utxoSeparationMode", utxoSeparationMode, "utxo separation mode")
+	flag.BoolVar(&redeemAllMode, "redeemAllMode", redeemAllMode, "redeem all mode")
 	flag.Parse()
 	if len(wif) == 0 {
 		flag.Usage()
@@ -80,6 +85,7 @@ func newSender() *Sender {
 		covenantAddress:    "6ad3f81523c87aa17f1dfa08271cf57b6277c98e",
 		sideChainReceiver:  "b24FD9aeCaC7034819FffE8064bA5133e2Ef1a4F",
 		utxoSeparationMode: utxoSeparationMode,
+		redeemAllMode:      redeemAllMode,
 	}
 	w, err := bchutil.DecodeWIF(wif)
 	if err != nil {
@@ -132,8 +138,8 @@ func newSender() *Sender {
 	}
 	s.smartbchClient = smartbchClient
 	s.minCCAmount = 0.001
-	s.totalAmountMainToSide = uint256.NewInt(0)
-	s.totalAmountSideToMain = uint256.NewInt(0)
+	s.totalAmountM2S = uint256.NewInt(0)
+	s.totalAmountS2M = uint256.NewInt(0)
 
 	fmt.Printf(`
 Sender basic infos:
@@ -172,6 +178,11 @@ func main() {
 		if s.utxoSeparationMode {
 			fmt.Println("In utxo separation mode !!!")
 			s.utxoSeparation(unspentUtxos)
+			return
+		}
+		if s.redeemAllMode {
+			fmt.Println("In redeem all mode !!!")
+			s.redeemAll()
 			return
 		}
 		var utxoInfos []*crossUtxoInfo
@@ -239,7 +250,8 @@ func main() {
 				fmt.Printf("redeem tx failed, receipt:%s\n", string(out))
 				continue
 			}
-			s.totalAmountSideToMain = uint256.NewInt(0).Add(s.totalAmountSideToMain, info.amount)
+			s.totalAmountS2M = uint256.NewInt(0).Add(s.totalAmountS2M, info.amount)
+			s.totalTxNumsS2M++
 			successRedeemNums++
 		}
 		// step 4. check main chain sender balance, if redeem success, it will increase and amount of unspent utxo will increase too.
@@ -259,12 +271,14 @@ func main() {
 		}
 		timeAfter := time.Now().Unix()
 		fmt.Printf(`
-Summary, In this round:
-we transfer %d cross tx
+Summary:
+transfer %d cross tx this round
 total bch from main chain to side chain:%d
 total bch from side chain to main chain:%d
+total txs from main chain to side chain:%d
+total txs from side chain to main chain:%d
 total time:%d
-`, successRedeemNums, s.totalAmountMainToSide.Uint64(), s.totalAmountSideToMain.Uint64(), timeAfter-timeBegin)
+`, successRedeemNums, s.totalAmountM2S.Uint64(), s.totalAmountS2M.Uint64(), s.totalTxNumsM2S, s.totalTxNumsS2M, timeAfter-timeBegin)
 		time.Sleep(300 * time.Second)
 		fmt.Printf("Another New Round Start !!!\n")
 	}
@@ -286,7 +300,8 @@ func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error
 	}
 	err = s.smartbchClient.SendTransaction(context.Background(), signedTx)
 	if err != nil {
-		panic(err)
+		fmt.Println("SendTransaction:" + err.Error())
+		return common.Hash{}, err
 	}
 	return signedTx.Hash(), nil
 }
@@ -327,7 +342,8 @@ func (s *Sender) transferToSideChain(unspentUtxo btcjson.ListUnspentResult) (*ch
 		if err != nil {
 			fmt.Printf("send main chain to side chain transaction, err:%s\n", err.Error())
 		} else {
-			s.totalAmountMainToSide = uint256.NewInt(0).Add(s.totalAmountMainToSide, uint256.NewInt(uint64(unspentUtxo.Amount*mul)-uint64(s.fee)))
+			s.totalAmountM2S = uint256.NewInt(0).Add(s.totalAmountM2S, uint256.NewInt(uint64(unspentUtxo.Amount*mul)-uint64(s.fee)))
+			s.totalTxNumsM2S++
 			fmt.Println("send main chain to side chain transaction success, txid:" + txid.String())
 		}
 		return txid, err
@@ -473,4 +489,27 @@ func (s *Sender) transferForSeparation(unspent btcjson.ListUnspentResult, from b
 		return nil, err
 	}
 	return txHash, nil
+}
+
+func (s *Sender) redeemAll() {
+	fmt.Println("redeem all")
+	utxoInfos, err := s.smartbchClient.RedeemableUtxos(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	nonce, err := s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
+	if err != nil {
+		panic(err)
+	}
+	count := 0
+	for _, info := range utxoInfos.Infos {
+		_, err := s.redeem(info.Txid.Big(), big.NewInt(0).Mul(big.NewInt(int64(info.Amount)), big.NewInt(1e10)), nonce)
+		if err != nil {
+			continue
+		}
+		nonce++
+		count++
+		time.Sleep(6 * time.Second)
+	}
+	fmt.Printf("redeem %d utxos\n", count)
 }
