@@ -5,10 +5,11 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/gcash/bchd/chaincfg"
+	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -17,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/btcjson"
-	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/rpcclient"
 	"github.com/gcash/bchd/txscript"
@@ -83,63 +83,22 @@ func newSender() *Sender {
 	s := Sender{
 		chainId:            uint256.NewInt(0x2712),
 		covenantAddress:    "6ad3f81523c87aa17f1dfa08271cf57b6277c98e",
-		sideChainReceiver:  "b24FD9aeCaC7034819FffE8064bA5133e2Ef1a4F",
 		utxoSeparationMode: utxoSeparationMode,
 		redeemAllMode:      redeemAllMode,
+		minCCAmount:        0.001,
+		fee:                1000,
+		totalAmountM2S:     uint256.NewInt(0),
+		totalAmountS2M:     uint256.NewInt(0),
 	}
-	w, err := bchutil.DecodeWIF(wif)
+	s.initMainChainFields(wif)
+	s.initSideChainFields(sideChainReceiverK)
+
+	var err error
+	s.mainChainClient = makeMainChainClient(mainChainClientInfo)
+	s.smartbchClient, err = client.Dial(sideChainUrl)
 	if err != nil {
 		panic(err)
 	}
-	s.wif = w
-	pkhFrom := bchutil.Hash160(w.SerializePubKey())
-	s.targetAddress = common.HexToAddress(hex.EncodeToString(pkhFrom))
-	from, err := bchutil.NewAddressPubKeyHash(pkhFrom, &chaincfg.TestNet3Params)
-	if err != nil {
-		panic(err)
-	}
-	s.from = from
-	from.ScriptAddress()
-	pkhTo, err := hex.DecodeString(s.covenantAddress)
-	if err != nil {
-		panic(err)
-	}
-	to, err := bchutil.NewAddressScriptHashFromHash(pkhTo, &chaincfg.TestNet3Params)
-	s.to = to
-	s.fee = 1000
-	keyBz, err := hex.DecodeString(sideChainReceiverK)
-	if err != nil {
-		panic(err)
-	}
-	privateKey, err := crypto.ToECDSA(keyBz)
-	if err != nil {
-		panic(err)
-	}
-	s.sideChainReceiverKey = privateKey
-	bchClientParams := strings.Split(mainChainClientInfo, ",")
-	if len(bchClientParams) != 3 {
-		panic("invalid main chain client param")
-	}
-	connCfg := &rpcclient.ConnConfig{
-		Host:         bchClientParams[0],
-		User:         bchClientParams[1],
-		Pass:         bchClientParams[2],
-		HTTPPostMode: true,
-		DisableTLS:   true,
-	}
-	mainChainClient, err := rpcclient.New(connCfg, nil)
-	if err != nil {
-		panic(err)
-	}
-	s.mainChainClient = mainChainClient
-	smartbchClient, err := client.Dial(sideChainUrl)
-	if err != nil {
-		panic(err)
-	}
-	s.smartbchClient = smartbchClient
-	s.minCCAmount = 0.001
-	s.totalAmountM2S = uint256.NewInt(0)
-	s.totalAmountS2M = uint256.NewInt(0)
 
 	fmt.Printf(`
 Sender basic infos:
@@ -160,6 +119,59 @@ type crossUtxoInfo struct {
 type redeemInfo struct {
 	txid   common.Hash
 	amount *uint256.Int
+}
+
+func makeMainChainClient(mainChainClientInfo string) *rpcclient.Client {
+	bchClientParams := strings.Split(mainChainClientInfo, ",")
+	if len(bchClientParams) != 3 {
+		panic("invalid main chain client param")
+	}
+	connCfg := &rpcclient.ConnConfig{
+		Host:         bchClientParams[0],
+		User:         bchClientParams[1],
+		Pass:         bchClientParams[2],
+		HTTPPostMode: true,
+		DisableTLS:   true,
+	}
+	mainChainClient, err := rpcclient.New(connCfg, nil)
+	if err != nil {
+		panic(err)
+	}
+	return mainChainClient
+}
+
+func (s *Sender) initMainChainFields(wif string) {
+	w, err := bchutil.DecodeWIF(wif)
+	if err != nil {
+		panic(err)
+	}
+	s.wif = w
+	pkhFrom := bchutil.Hash160(w.SerializePubKey())
+	s.targetAddress = common.HexToAddress(hex.EncodeToString(pkhFrom))
+	from, err := bchutil.NewAddressPubKeyHash(pkhFrom, &chaincfg.TestNet3Params)
+	if err != nil {
+		panic(err)
+	}
+	s.from = from
+	pkhTo, err := hex.DecodeString(s.covenantAddress)
+	if err != nil {
+		panic(err)
+	}
+	to, err := bchutil.NewAddressScriptHashFromHash(pkhTo, &chaincfg.TestNet3Params)
+	s.to = to
+}
+
+func (s *Sender) initSideChainFields(sideChainReceiverK string) {
+	keyBz, err := hex.DecodeString(sideChainReceiverK)
+	if err != nil {
+		panic(err)
+	}
+	privateKey, err := crypto.ToECDSA(keyBz)
+	if err != nil {
+		panic(err)
+	}
+	s.sideChainReceiverKey = privateKey
+	s.sideChainReceiver = crypto.PubkeyToAddress(privateKey.PublicKey).String()[2:]
 }
 
 func main() {
@@ -198,7 +210,7 @@ func main() {
 			}
 			utxoInfos = append(utxoInfos, &crossUtxoInfo{
 				txid:   txid,
-				amount: big.NewInt(int64(unspentUtxo.Amount*1e8) - s.fee),
+				amount: big.NewInt(int64(math.Round(unspentUtxo.Amount*1e8)) - s.fee),
 			})
 		}
 		// step 2. wait side chain handle these cross chain utxo
@@ -282,28 +294,6 @@ total time:%d
 		time.Sleep(300 * time.Second)
 		fmt.Printf("Another New Round Start !!!\n")
 	}
-}
-
-func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error) {
-	data := abi.PackRedeemFunc(txid, big.NewInt(0), s.targetAddress)
-	gasLimit := 4000_000
-	gasPrice := uint256.NewInt(10_000_000_000)
-	tx := ethutils.NewTx(nonce, &ccContractAddress, amount, uint64(gasLimit), gasPrice.ToBig(), data)
-	out, err := tx.MarshalJSON()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("redeem tx:%s\n", string(out))
-	signedTx, err := ethutils.SignTx(tx, s.chainId.ToBig(), s.sideChainReceiverKey)
-	if err != nil {
-		panic(err)
-	}
-	err = s.smartbchClient.SendTransaction(context.Background(), signedTx)
-	if err != nil {
-		fmt.Println("SendTransaction:" + err.Error())
-		return common.Hash{}, err
-	}
-	return signedTx.Hash(), nil
 }
 
 func (s *Sender) getSideChainBalance(address string) *uint256.Int {
@@ -425,21 +415,22 @@ func (s *Sender) checkMainChainTxStatus(txHash *chainhash.Hash) error {
 func (s *Sender) utxoSeparation(unspentUtxos []btcjson.ListUnspentResult) {
 	for _, unspent := range unspentUtxos {
 		// 8x minCCAmount
-		if int64(unspent.Amount*1e8) > int64(s.minCCAmount*1e8*8)+s.fee {
-			outAmount := (int64(unspent.Amount*1e8) - s.fee) / 4
+		if int64(math.Round(unspent.Amount*1e8)) > int64(s.minCCAmount*1e8*8)+s.fee {
+			outAmount := (int64(math.Round(unspent.Amount*1e8)) - s.fee) / 4
 			fmt.Printf("separate tx %s to 4 parts, which amount is %d\n", unspent.TxID, outAmount)
 			_, _ = s.transferForSeparation(unspent, s.from, outAmount, 4, s.fee, s.wif.PrivKey, s.wif.SerializePubKey())
-		} else if int64(unspent.Amount*1e8) > int64(s.minCCAmount*1e8*4)+s.fee /* 4x minCCAmount */ {
-			outAmount := (int64(unspent.Amount*1e8) - s.fee) / 2
+		} else if int64(math.Round(unspent.Amount*1e8)) > int64(s.minCCAmount*1e8*4)+s.fee /* 4x minCCAmount */ {
+			outAmount := (int64(math.Round(unspent.Amount*1e8)) - s.fee) / 2
 			fmt.Printf("separate tx %s to 2 parts, which amount is %d\n", unspent.TxID, outAmount)
 			_, _ = s.transferForSeparation(unspent, s.from, outAmount, 2, s.fee, s.wif.PrivKey, s.wif.SerializePubKey())
 		}
 	}
 }
 
+// transfer to self for get many tiny utxo
 func (s *Sender) transferForSeparation(unspent btcjson.ListUnspentResult, from bchutil.Address, amount, outputNums, fee int64, privateKey *bchec.PrivateKey, fromPubkey []byte) (*chainhash.Hash, error) {
 	tx := wire.NewMsgTx(2)
-	if int64(unspent.Amount*(1e8)) < (amount*outputNums + fee) {
+	if int64(math.Round(unspent.Amount*(1e8))) < (amount*outputNums + fee) {
 		return nil, errors.New("unspent amount not enough")
 	}
 	// add input
@@ -456,7 +447,7 @@ func (s *Sender) transferForSeparation(unspent btcjson.ListUnspentResult, from b
 	for i := int64(0); i < outputNums; i++ {
 		tx.AddTxOut(txOut)
 	}
-	change := int64(unspent.Amount*1e8) - amount*outputNums - fee
+	change := int64(math.Round(unspent.Amount*1e8)) - amount*outputNums - fee
 	if change > 0 {
 		// add change receiver
 		pkScript, err := txscript.PayToAddrScript(from)
@@ -472,7 +463,7 @@ func (s *Sender) transferForSeparation(unspent btcjson.ListUnspentResult, from b
 	}
 	sigHashes := txscript.NewTxSigHashes(tx)
 	hashType := txscript.SigHashAll | txscript.SigHashForkID
-	sigHash, err := txscript.CalcSignatureHash(scriptPubkey, sigHashes, hashType, tx, 0, int64(unspent.Amount*1e8), true)
+	sigHash, err := txscript.CalcSignatureHash(scriptPubkey, sigHashes, hashType, tx, 0, int64(math.Round(unspent.Amount*1e8)), true)
 	if err != nil {
 		return nil, err
 	}
@@ -512,4 +503,26 @@ func (s *Sender) redeemAll() {
 		time.Sleep(6 * time.Second)
 	}
 	fmt.Printf("redeem %d utxos\n", count)
+}
+
+func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error) {
+	data := abi.PackRedeemFunc(txid, big.NewInt(0), s.targetAddress)
+	gasLimit := 4000_000
+	gasPrice := uint256.NewInt(10_000_000_000)
+	tx := ethutils.NewTx(nonce, &ccContractAddress, amount, uint64(gasLimit), gasPrice.ToBig(), data)
+	out, err := tx.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("redeem tx:%s\n", string(out))
+	signedTx, err := ethutils.SignTx(tx, s.chainId.ToBig(), s.sideChainReceiverKey)
+	if err != nil {
+		panic(err)
+	}
+	err = s.smartbchClient.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		fmt.Println("SendTransaction:" + err.Error())
+		return common.Hash{}, err
+	}
+	return signedTx.Hash(), nil
 }
