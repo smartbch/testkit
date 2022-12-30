@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/gcash/bchd/chaincfg"
 	"math"
 	"math/big"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gcash/bchd/bchec"
 	"github.com/gcash/bchd/btcjson"
+	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/rpcclient"
 	"github.com/gcash/bchd/txscript"
@@ -51,9 +51,13 @@ type Sender struct {
 	targetAddress        common.Address // pubkey hash160 respond to Sender.from
 
 	minCCAmount float64 // 0.001bch for test
+	maxCCAmount float64 // 0.01bch for test
 
-	utxoSeparationMode bool // separation utxo for more utxos
-	redeemAllMode      bool // redeem all redeemable utxo
+	utxoSeparationMode             bool // separation utxo for more utxos
+	redeemAllMode                  bool // redeem all redeemable utxo
+	lostAndFoundAboveMaxAmountMode bool
+	lostAndFoundBelowMinAmountMode bool
+	redeemAllLostAndFoundMode      bool
 
 	// data for analysis
 	totalTxNumsM2S uint64
@@ -69,6 +73,9 @@ func newSender() *Sender {
 	var sideChainReceiverK string
 	var utxoSeparationMode bool = false
 	var redeemAllMode bool = false
+	var lostAndFoundAboveMaxAmountMode bool = false
+	var lostAndFoundBelowMinAmountMode bool = false
+	var redeemAllLostAndFoundMode bool = false
 
 	flag.StringVar(&mainChainClientInfo, "mainChainClientInfo", mainChainClientInfo, "main chain client info: url,username,password")
 	flag.StringVar(&sideChainUrl, "sideChainUrl", sideChainUrl, "side chain url")
@@ -76,19 +83,27 @@ func newSender() *Sender {
 	flag.StringVar(&sideChainReceiverK, "sideChainReceiverKey", sideChainReceiverK, "side chain sender key")
 	flag.BoolVar(&utxoSeparationMode, "utxoSeparationMode", utxoSeparationMode, "utxo separation mode")
 	flag.BoolVar(&redeemAllMode, "redeemAllMode", redeemAllMode, "redeem all mode")
+	flag.BoolVar(&redeemAllLostAndFoundMode, "redeemAllLostAndFoundMode", redeemAllLostAndFoundMode, "redeem all lost and found mode")
+	flag.BoolVar(&lostAndFoundAboveMaxAmountMode, "lostAndFoundAboveMaxAmountMode", lostAndFoundAboveMaxAmountMode, "lost and found above max amount mode")
+	flag.BoolVar(&lostAndFoundBelowMinAmountMode, "lostAndFoundBelowMinAmountMode", lostAndFoundBelowMinAmountMode, "lost and found below min amount mode")
+
 	flag.Parse()
 	if len(wif) == 0 {
 		flag.Usage()
 	}
 	s := Sender{
-		chainId:            uint256.NewInt(0x2712),
-		covenantAddress:    "6ad3f81523c87aa17f1dfa08271cf57b6277c98e",
-		utxoSeparationMode: utxoSeparationMode,
-		redeemAllMode:      redeemAllMode,
-		minCCAmount:        0.001,
-		fee:                1000,
-		totalAmountM2S:     uint256.NewInt(0),
-		totalAmountS2M:     uint256.NewInt(0),
+		chainId:                        uint256.NewInt(0x2712),
+		covenantAddress:                "8e40a159Ab1B56f4179d9aC60B08d058661383c1",
+		utxoSeparationMode:             utxoSeparationMode,
+		redeemAllMode:                  redeemAllMode,
+		lostAndFoundAboveMaxAmountMode: lostAndFoundAboveMaxAmountMode,
+		lostAndFoundBelowMinAmountMode: lostAndFoundBelowMinAmountMode,
+		redeemAllLostAndFoundMode:      redeemAllLostAndFoundMode,
+		minCCAmount:                    0.001,
+		maxCCAmount:                    0.01,
+		fee:                            1000,
+		totalAmountM2S:                 uint256.NewInt(0),
+		totalAmountS2M:                 uint256.NewInt(0),
 	}
 	s.initMainChainFields(wif)
 	s.initSideChainFields(sideChainReceiverK)
@@ -99,6 +114,11 @@ func newSender() *Sender {
 	if err != nil {
 		panic(err)
 	}
+	ccInfo, err := s.smartbchClient.CcInfo(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	s.covenantAddress = strings.TrimPrefix(ccInfo.CurrCovenantAddress, "0x")
 
 	fmt.Printf(`
 Sender basic infos:
@@ -176,6 +196,16 @@ func (s *Sender) initSideChainFields(sideChainReceiverK string) {
 
 func main() {
 	s := newSender()
+	if s.redeemAllMode {
+		fmt.Println("In redeem all mode !!!")
+		s.redeemAll()
+		return
+	}
+	if s.redeemAllLostAndFoundMode {
+		fmt.Println("redeem all lost and found mode !!!")
+		s.redeemAllLostAndFound()
+		return
+	}
 	for {
 		timeBegin := time.Now().Unix()
 		balanceBefore := s.getSideChainBalance(s.sideChainReceiver)
@@ -192,13 +222,30 @@ func main() {
 			s.utxoSeparation(unspentUtxos)
 			return
 		}
-		if s.redeemAllMode {
-			fmt.Println("In redeem all mode !!!")
-			s.redeemAll()
-			return
+		if s.lostAndFoundAboveMaxAmountMode {
+			fmt.Println("lost and found above max amount mode !!!")
+		}
+		if s.lostAndFoundBelowMinAmountMode {
+			fmt.Println("lost and found below min amount mode !!!")
 		}
 		var utxoInfos []*crossUtxoInfo
+		count := 0
 		for _, unspentUtxo := range unspentUtxos {
+			if s.lostAndFoundAboveMaxAmountMode {
+				if unspentUtxo.Amount < s.maxCCAmount+0.00001 {
+					continue
+				}
+			}
+			if s.lostAndFoundBelowMinAmountMode {
+				// we should make the amount in (0.0006, 0.001), so the utxo will trigger lost and found below minCCAmount
+				if unspentUtxo.Amount >= 0.0008 {
+					txid, _ := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(70000), s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
+					fmt.Printf("txid:%s\n", txid.String())
+					return
+				} else {
+					continue
+				}
+			}
 			txHash, err := s.transferToSideChain(unspentUtxo)
 			if err != nil {
 				fmt.Printf("transfer to side chain failed: %s\n", err.Error())
@@ -212,6 +259,10 @@ func main() {
 				txid:   txid,
 				amount: big.NewInt(int64(math.Round(unspentUtxo.Amount*1e8)) - s.fee),
 			})
+			count++
+			//if count == 5 {
+			//	return
+			//}
 		}
 		// step 2. wait side chain handle these cross chain utxo
 		for {
@@ -235,7 +286,11 @@ func main() {
 		}
 		fmt.Printf("nonce is %d\n", nonce)
 		for _, info := range utxoInfos {
-			txid, err := s.redeem(info.txid, big.NewInt(0).Mul(info.amount, big.NewInt(1e10)), nonce)
+			redeemAmount := big.NewInt(0).Mul(info.amount, big.NewInt(1e10))
+			if s.lostAndFoundAboveMaxAmountMode {
+				redeemAmount = big.NewInt(0)
+			}
+			txid, err := s.redeem(info.txid, redeemAmount, nonce)
 			if err != nil {
 				fmt.Printf("send redeem tx error:%s\n", err.Error())
 				continue
@@ -283,14 +338,14 @@ func main() {
 		}
 		timeAfter := time.Now().Unix()
 		fmt.Printf(`
-Summary:
-transfer %d cross tx this round
-total bch from main chain to side chain:%d
-total bch from side chain to main chain:%d
-total txs from main chain to side chain:%d
-total txs from side chain to main chain:%d
-total time:%d
-`, successRedeemNums, s.totalAmountM2S.Uint64(), s.totalAmountS2M.Uint64(), s.totalTxNumsM2S, s.totalTxNumsS2M, timeAfter-timeBegin)
+	Summary:
+	transfer %d cross tx this round
+	total bch from main chain to side chain:%d
+	total bch from side chain to main chain:%d
+	total txs from main chain to side chain:%d
+	total txs from side chain to main chain:%d
+	total time:%d
+	`, successRedeemNums, s.totalAmountM2S.Uint64(), s.totalAmountS2M.Uint64(), s.totalTxNumsM2S, s.totalTxNumsS2M, timeAfter-timeBegin)
 		time.Sleep(300 * time.Second)
 		fmt.Printf("Another New Round Start !!!\n")
 	}
@@ -327,11 +382,9 @@ func (s *Sender) listUnspentUtxo(address bchutil.Address) []btcjson.ListUnspentR
 
 func (s *Sender) transferToSideChain(unspentUtxo btcjson.ListUnspentResult) (*chainhash.Hash, error) {
 	mul := 1e8
-	if int64(unspentUtxo.Amount*mul) > s.fee {
-		txid, err := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(unspentUtxo.Amount*mul)-s.fee, s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
-		if err != nil {
-			fmt.Printf("send main chain to side chain transaction, err:%s\n", err.Error())
-		} else {
+	if int64(math.Round(unspentUtxo.Amount*mul)) > s.fee {
+		txid, err := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(math.Round(unspentUtxo.Amount*mul))-s.fee-1, s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
+		if err == nil {
 			s.totalAmountM2S = uint256.NewInt(0).Add(s.totalAmountM2S, uint256.NewInt(uint64(unspentUtxo.Amount*mul)-uint64(s.fee)))
 			s.totalTxNumsM2S++
 			fmt.Println("send main chain to side chain transaction success, txid:" + txid.String())
@@ -358,7 +411,7 @@ func (s *Sender) transferSingleInput(unspent btcjson.ListUnspentResult, from, to
 	}
 	txOut := wire.NewTxOut(amount, pkScript)
 	tx.AddTxOut(txOut)
-	change := int64(unspent.Amount*1e8) - amount - fee
+	change := int64(math.Round(unspent.Amount*1e8)) - amount - fee
 	if change > 0 {
 		// add change receiver
 		pkScript, err := txscript.PayToAddrScript(from)
@@ -381,7 +434,7 @@ func (s *Sender) transferSingleInput(unspent btcjson.ListUnspentResult, from, to
 	}
 	sigHashes := txscript.NewTxSigHashes(tx)
 	hashType := txscript.SigHashAll | txscript.SigHashForkID
-	sigHash, err := txscript.CalcSignatureHash(scriptPubkey, sigHashes, hashType, tx, 0, int64(unspent.Amount*1e8), true)
+	sigHash, err := txscript.CalcSignatureHash(scriptPubkey, sigHashes, hashType, tx, 0, int64(math.Round(unspent.Amount*1e8)), true)
 	if err != nil {
 		return nil, err
 	}
@@ -525,4 +578,27 @@ func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error
 		return common.Hash{}, err
 	}
 	return signedTx.Hash(), nil
+}
+
+func (s *Sender) redeemAllLostAndFound() {
+	fmt.Println("redeem all lost and found")
+	utxoInfos, err := s.smartbchClient.LostAndFoundUtxos(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	nonce, err := s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
+	if err != nil {
+		panic(err)
+	}
+	count := 0
+	for _, info := range utxoInfos.Infos {
+		_, err := s.redeem(info.Txid.Big(), big.NewInt(0), nonce)
+		if err != nil {
+			continue
+		}
+		nonce++
+		count++
+		time.Sleep(6 * time.Second)
+	}
+	fmt.Printf("redeem %d utxos\n", count)
 }
