@@ -49,6 +49,18 @@ module.exports = {
       network_id: "*",       // Any network (default: none)
       gasPrice: 10000000000,
     },
+    sbch_shagate: {
+      // host: "",     // Localhost (default: none)
+      // port: 8545,            // Standard Ethereum port (default: none)
+      network_id: "10002",       // Any network (default: none)
+      gasPrice: 10000000000,
+      provider: () => new HDWalletProvider({
+        providerOrUrl: "http://127.0.0.1:8545", // amber
+        privateKeys: [
+          "4984f7a54491604629ca6f1d1672b358480c5908a56d5216ec0a127f0ba54e9b",
+        ],
+      }),
+    },
     sbch_testnet: {
       // host: "158.247.197.98",
       // port: 8545,

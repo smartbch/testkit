@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -40,11 +41,13 @@ type Sender struct {
 	mainChainClient *rpcclient.Client
 	smartbchClient  *client.Client
 
-	covenantAddress string
-	from            bchutil.Address // main chain tx sender
-	wif             *bchutil.WIF    // main chain tx sender wif
-	to              bchutil.Address // covenant address
-	fee             int64           // main chain tx fee
+	covenantAddress    string
+	oldCovenantAddress string
+	from               bchutil.Address // main chain tx sender
+	wif                *bchutil.WIF    // main chain tx sender wif
+	to                 bchutil.Address // covenant address
+	oldTo              bchutil.Address // old covenant address
+	fee                int64           // main chain tx fee
 
 	sideChainReceiver    string
 	sideChainReceiverKey *ecdsa.PrivateKey
@@ -53,11 +56,14 @@ type Sender struct {
 	minCCAmount float64 // 0.001bch for test
 	maxCCAmount float64 // 0.01bch for test
 
-	utxoSeparationMode             bool // separation utxo for more utxos
-	redeemAllMode                  bool // redeem all redeemable utxo
-	lostAndFoundAboveMaxAmountMode bool
-	lostAndFoundBelowMinAmountMode bool
-	redeemAllLostAndFoundMode      bool
+	utxoSeparationMode                     bool // separation utxo for more utxos
+	redeemAllMode                          bool // redeem all redeemable utxo
+	lostAndFoundAboveMaxAmountMode         bool
+	lostAndFoundBelowMinAmountMode         bool
+	lostAndFoundWithOldCovenantAddressMode bool
+	redeemAllLostAndFoundMode              bool
+	transferByBurnMode                     bool
+	aggregationMode                        bool
 
 	// data for analysis
 	totalTxNumsM2S uint64
@@ -72,10 +78,13 @@ func newSender() *Sender {
 	var wif string
 	var sideChainReceiverK string
 	var utxoSeparationMode bool = false
-	var redeemAllMode bool = false
+	var redeemAllMode bool = true
 	var lostAndFoundAboveMaxAmountMode bool = false
 	var lostAndFoundBelowMinAmountMode bool = false
 	var redeemAllLostAndFoundMode bool = false
+	var transferByBurnMode bool = false
+	var lostAndFoundWithOldCovenantAddressMode bool = false
+	var aggregationMode bool = false
 
 	flag.StringVar(&mainChainClientInfo, "mainChainClientInfo", mainChainClientInfo, "main chain client info: url,username,password")
 	flag.StringVar(&sideChainUrl, "sideChainUrl", sideChainUrl, "side chain url")
@@ -86,26 +95,32 @@ func newSender() *Sender {
 	flag.BoolVar(&redeemAllLostAndFoundMode, "redeemAllLostAndFoundMode", redeemAllLostAndFoundMode, "redeem all lost and found mode")
 	flag.BoolVar(&lostAndFoundAboveMaxAmountMode, "lostAndFoundAboveMaxAmountMode", lostAndFoundAboveMaxAmountMode, "lost and found above max amount mode")
 	flag.BoolVar(&lostAndFoundBelowMinAmountMode, "lostAndFoundBelowMinAmountMode", lostAndFoundBelowMinAmountMode, "lost and found below min amount mode")
+	flag.BoolVar(&lostAndFoundWithOldCovenantAddressMode, "lostAndFoundWithOldCovenantAddressMode", lostAndFoundWithOldCovenantAddressMode, "lost and found as of transfer to old covenant address mode")
+	flag.BoolVar(&transferByBurnMode, "transferByBurnMode", transferByBurnMode, "transfer by burn mode")
+	flag.BoolVar(&aggregationMode, "aggregationMode", aggregationMode, "aggregation mode")
 
 	flag.Parse()
 	if len(wif) == 0 {
 		flag.Usage()
 	}
 	s := Sender{
-		chainId:                        uint256.NewInt(0x2712),
-		covenantAddress:                "8e40a159Ab1B56f4179d9aC60B08d058661383c1",
-		utxoSeparationMode:             utxoSeparationMode,
-		redeemAllMode:                  redeemAllMode,
-		lostAndFoundAboveMaxAmountMode: lostAndFoundAboveMaxAmountMode,
-		lostAndFoundBelowMinAmountMode: lostAndFoundBelowMinAmountMode,
-		redeemAllLostAndFoundMode:      redeemAllLostAndFoundMode,
-		minCCAmount:                    0.001,
-		maxCCAmount:                    0.01,
-		fee:                            1000,
-		totalAmountM2S:                 uint256.NewInt(0),
-		totalAmountS2M:                 uint256.NewInt(0),
+		chainId:            uint256.NewInt(0x2712),
+		covenantAddress:    "6Ad3f81523c87aa17f1dFA08271cF57b6277C98e",
+		utxoSeparationMode: utxoSeparationMode,
+
+		redeemAllMode:                          redeemAllMode,
+		lostAndFoundAboveMaxAmountMode:         lostAndFoundAboveMaxAmountMode,
+		lostAndFoundBelowMinAmountMode:         lostAndFoundBelowMinAmountMode,
+		lostAndFoundWithOldCovenantAddressMode: lostAndFoundWithOldCovenantAddressMode,
+		redeemAllLostAndFoundMode:              redeemAllLostAndFoundMode,
+		transferByBurnMode:                     transferByBurnMode,
+		aggregationMode:                        aggregationMode,
+		minCCAmount:                            0.001,
+		maxCCAmount:                            0.01,
+		fee:                                    1000,
+		totalAmountM2S:                         uint256.NewInt(0),
+		totalAmountS2M:                         uint256.NewInt(0),
 	}
-	s.initMainChainFields(wif)
 	s.initSideChainFields(sideChainReceiverK)
 
 	var err error
@@ -119,7 +134,10 @@ func newSender() *Sender {
 		panic(err)
 	}
 	s.covenantAddress = strings.TrimPrefix(ccInfo.CurrCovenantAddress, "0x")
-
+	if ccInfo.LastCovenantAddress != "0x0000000000000000000000000000000000000000" {
+		s.oldCovenantAddress = ccInfo.LastCovenantAddress
+	}
+	s.initMainChainFields(wif)
 	fmt.Printf(`
 Sender basic infos:
 covenantAddress:%s
@@ -179,6 +197,17 @@ func (s *Sender) initMainChainFields(wif string) {
 	}
 	to, err := bchutil.NewAddressScriptHashFromHash(pkhTo, &chaincfg.TestNet3Params)
 	s.to = to
+	if s.oldCovenantAddress != "" {
+		oldPkhTo, err := hex.DecodeString(s.oldCovenantAddress)
+		if err != nil {
+			panic(err)
+		}
+		oldTo, err := bchutil.NewAddressScriptHashFromHash(oldPkhTo, &chaincfg.TestNet3Params)
+		if err != nil {
+			panic(err)
+		}
+		s.oldTo = oldTo
+	}
 }
 
 func (s *Sender) initSideChainFields(sideChainReceiverK string) {
@@ -196,6 +225,7 @@ func (s *Sender) initSideChainFields(sideChainReceiverK string) {
 
 func main() {
 	s := newSender()
+	time.Sleep(10 * time.Second)
 	if s.redeemAllMode {
 		fmt.Println("In redeem all mode !!!")
 		s.redeemAll()
@@ -216,6 +246,41 @@ func main() {
 			time.Sleep(30 * time.Second)
 			fmt.Println("Not find unspent utxo, retry 30s later...")
 			continue
+		}
+		if s.transferByBurnMode {
+			fmt.Println("In transfer by burn mode !!!")
+			count := 0
+			for _, unspent := range unspentUtxos {
+				err := s.transferByBurn(unspent)
+				if err == nil {
+					count++
+				}
+				if count == 10 {
+					return
+				}
+			}
+		}
+		if s.lostAndFoundWithOldCovenantAddressMode {
+			fmt.Println("In lostAndFoundWithOldCovenantAddress mode !!!")
+			count := 0
+			if s.oldCovenantAddress == "" {
+				fmt.Println("old covenant address is zero")
+				return
+			}
+			for _, unspent := range unspentUtxos {
+				_, err := s.transferToSideChain(unspent, s.oldTo)
+				if err == nil {
+					count++
+				}
+				if count == 10 {
+					return
+				}
+			}
+		}
+		if s.aggregationMode {
+			fmt.Println("In utxo aggregation mode !!!")
+			s.UtxosAggregation(unspentUtxos, 0.003, 0.001)
+			return
 		}
 		if s.utxoSeparationMode {
 			fmt.Println("In utxo separation mode !!!")
@@ -246,7 +311,7 @@ func main() {
 					continue
 				}
 			}
-			txHash, err := s.transferToSideChain(unspentUtxo)
+			txHash, err := s.transferToSideChain(unspentUtxo, s.to)
 			if err != nil {
 				fmt.Printf("transfer to side chain failed: %s\n", err.Error())
 				continue
@@ -280,10 +345,7 @@ func main() {
 		// step 3. send redeem txs
 		fmt.Printf("send redeem txs...\n")
 		var redeemInfos []*redeemInfo
-		nonce, err := s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
-		if err != nil {
-			panic(err)
-		}
+		nonce := s.getNonce()
 		fmt.Printf("nonce is %d\n", nonce)
 		for _, info := range utxoInfos {
 			redeemAmount := big.NewInt(0).Mul(info.amount, big.NewInt(1e10))
@@ -293,6 +355,8 @@ func main() {
 			txid, err := s.redeem(info.txid, redeemAmount, nonce)
 			if err != nil {
 				fmt.Printf("send redeem tx error:%s\n", err.Error())
+				time.Sleep(10 * time.Second)
+				nonce = s.getNonce()
 				continue
 			}
 			amount, _ := uint256.FromBig(info.amount)
@@ -303,6 +367,8 @@ func main() {
 			nonce++
 			time.Sleep(8 * time.Second)
 		}
+		// todo:
+		s.redeemAll()
 		time.Sleep(18 * time.Second)
 		successRedeemNums := 0
 		for _, info := range redeemInfos {
@@ -352,12 +418,33 @@ func main() {
 }
 
 func (s *Sender) getSideChainBalance(address string) *uint256.Int {
-	balance, err := s.smartbchClient.BalanceAt(context.Background(), common.HexToAddress(address), nil)
-	if err != nil {
-		panic(err)
+	var out *uint256.Int
+	for {
+		balance, err := s.smartbchClient.BalanceAt(context.Background(), common.HexToAddress(address), nil)
+		if err != nil {
+			fmt.Println(err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		out, _ = uint256.FromBig(balance)
+		break
 	}
-	out, _ := uint256.FromBig(balance)
 	return out
+}
+
+func (s *Sender) getNonce() uint64 {
+	var nonce uint64
+	var err error
+	for {
+		nonce, err = s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
+		if err != nil {
+			fmt.Println(err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		break
+	}
+	return nonce
 }
 
 func (s *Sender) getMainChainBalance(account string) *uint256.Int {
@@ -370,20 +457,25 @@ func (s *Sender) getMainChainBalance(account string) *uint256.Int {
 }
 
 func (s *Sender) listUnspentUtxo(address bchutil.Address) []btcjson.ListUnspentResult {
-	unspentList, err := s.mainChainClient.ListUnspentMinMaxAddresses(1, 9999, []bchutil.Address{address})
-	if err != nil {
-		panic(err)
+	var unspentList []btcjson.ListUnspentResult
+	var err error
+	for {
+		unspentList, err = s.mainChainClient.ListUnspentMinMaxAddresses(1, 9999, []bchutil.Address{address})
+		if err != nil {
+			fmt.Println(err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		fmt.Printf("unspent utxos length:%d\n", len(unspentList))
+		break
 	}
-	//out, _ := json.MarshalIndent(unspentList, "", "  ")
-	//fmt.Printf("unspent utxos: \n%s\n", string(out))
-	fmt.Printf("unspent utxos length:%d\n", len(unspentList))
 	return unspentList
 }
 
-func (s *Sender) transferToSideChain(unspentUtxo btcjson.ListUnspentResult) (*chainhash.Hash, error) {
+func (s *Sender) transferToSideChain(unspentUtxo btcjson.ListUnspentResult, to bchutil.Address) (*chainhash.Hash, error) {
 	mul := 1e8
 	if int64(math.Round(unspentUtxo.Amount*mul)) > s.fee {
-		txid, err := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(math.Round(unspentUtxo.Amount*mul))-s.fee-1, s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
+		txid, err := s.transferSingleInput(unspentUtxo, s.from, to, int64(math.Round(unspentUtxo.Amount*mul))-s.fee, s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
 		if err == nil {
 			s.totalAmountM2S = uint256.NewInt(0).Add(s.totalAmountM2S, uint256.NewInt(uint64(unspentUtxo.Amount*mul)-uint64(s.fee)))
 			s.totalTxNumsM2S++
@@ -480,6 +572,54 @@ func (s *Sender) utxoSeparation(unspentUtxos []btcjson.ListUnspentResult) {
 	}
 }
 
+func (s *Sender) UtxosAggregation(unspentUtxos []btcjson.ListUnspentResult, maxAmountToCollect, minAmountToCollect float64) {
+	var utxosToSpend []btcjson.ListUnspentResult
+	count := 0
+	for _, unspent := range unspentUtxos {
+		if unspent.Amount >= minAmountToCollect && unspent.Amount <= maxAmountToCollect {
+			utxosToSpend = append(utxosToSpend, unspent)
+			count++
+		}
+		if count == 1 {
+			fmt.Println("hit")
+			break
+		}
+	}
+	if count != 1 {
+		fmt.Println("not hit")
+		return
+	}
+	for _, unspent := range unspentUtxos {
+		if unspent.Amount == 0.00000001 {
+			utxosToSpend = append(utxosToSpend, unspent)
+			count++
+		}
+		if count == 50 {
+			break
+		}
+	}
+	hash, err := s.transferForAggregation(utxosToSpend, s.from, 7500, s.wif.PrivKey, s.wif.SerializePubKey())
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(hash.String())
+	}
+}
+
+func (s *Sender) transferByBurn(unspent btcjson.ListUnspentResult) error {
+	mul := 1e8
+	if int64(math.Round(unspent.Amount*mul)) > s.fee+100 {
+		txid, err := s.transferSingleInput(unspent, s.from, s.to, 100, s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("send transferByBurn success:" + txid.String())
+		}
+		return err
+	}
+	return errors.New("amount not enough")
+}
+
 // transfer to self for get many tiny utxo
 func (s *Sender) transferForSeparation(unspent btcjson.ListUnspentResult, from bchutil.Address, amount, outputNums, fee int64, privateKey *bchec.PrivateKey, fromPubkey []byte) (*chainhash.Hash, error) {
 	tx := wire.NewMsgTx(2)
@@ -526,6 +666,61 @@ func (s *Sender) transferForSeparation(unspent btcjson.ListUnspentResult, from b
 	}
 	sigScript, err := txscript.NewScriptBuilder().AddData(append(sig.Serialize(), byte(hashType))).AddData(fromPubkey).Script()
 	tx.TxIn[0].SignatureScript = sigScript
+	var buf bytes.Buffer
+	_ = tx.Serialize(&buf)
+	txHash, err := s.mainChainClient.SendRawTransaction(tx, false)
+	if err != nil {
+		return nil, err
+	}
+	return txHash, nil
+}
+
+// transfer to self for get many tiny utxo
+func (s *Sender) transferForAggregation(unspentList []btcjson.ListUnspentResult, from bchutil.Address, fee int64, privateKey *bchec.PrivateKey, fromPubkey []byte) (*chainhash.Hash, error) {
+	tx := wire.NewMsgTx(2)
+	// add input
+	totalInAmount := 0.0
+	for _, unspent := range unspentList {
+		hash, _ := chainhash.NewHashFromStr(unspent.TxID)
+		outPoint := wire.NewOutPoint(hash, unspent.Vout)
+		txIn := wire.NewTxIn(outPoint, nil)
+		tx.AddTxIn(txIn)
+		totalInAmount += unspent.Amount
+	}
+	if int64(math.Round(totalInAmount*1e8)) <= fee {
+		return nil, errors.New("not cover fee")
+	}
+	// add output
+	change := int64(math.Round(totalInAmount*1e8)) - fee
+	if change > 0 {
+		// add change receiver
+		pkScript, err := txscript.PayToAddrScript(from)
+		if err != nil {
+			return nil, err
+		}
+		tx.AddTxOut(wire.NewTxOut(change, pkScript))
+	}
+	// sign
+	sigHashes := txscript.NewTxSigHashes(tx)
+	for idx, unspent := range unspentList {
+		scriptPubkey, err := hex.DecodeString(unspent.ScriptPubKey)
+		if err != nil {
+			return nil, err
+		}
+		hashType := txscript.SigHashSingle | txscript.SigHashForkID
+		sigHash, err := txscript.CalcSignatureHash(scriptPubkey, sigHashes, hashType, tx, idx, int64(math.Round(unspent.Amount*1e8)), true)
+		if err != nil {
+			return nil, err
+		}
+
+		sig, err := privateKey.SignECDSA(sigHash)
+		if err != nil {
+			panic(err)
+		}
+		sigScript, err := txscript.NewScriptBuilder().AddData(append(sig.Serialize(), byte(hashType))).AddData(fromPubkey).Script()
+		tx.TxIn[idx].SignatureScript = sigScript
+	}
+
 	var buf bytes.Buffer
 	_ = tx.Serialize(&buf)
 	txHash, err := s.mainChainClient.SendRawTransaction(tx, false)
@@ -582,23 +777,30 @@ func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error
 
 func (s *Sender) redeemAllLostAndFound() {
 	fmt.Println("redeem all lost and found")
-	utxoInfos, err := s.smartbchClient.LostAndFoundUtxos(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	nonce, err := s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
-	if err != nil {
-		panic(err)
-	}
 	count := 0
-	for _, info := range utxoInfos.Infos {
-		_, err := s.redeem(info.Txid.Big(), big.NewInt(0), nonce)
+	for {
+		utxoInfos, err := s.smartbchClient.LostAndFoundUtxos(context.Background())
 		if err != nil {
+			fmt.Println(err)
+			time.Sleep(10 * time.Second)
 			continue
 		}
-		nonce++
-		count++
-		time.Sleep(6 * time.Second)
+		nonce, err := s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
+		if err != nil {
+			fmt.Println(err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		for _, info := range utxoInfos.Infos {
+			_, err := s.redeem(info.Txid.Big(), big.NewInt(0), nonce)
+			if err != nil {
+				continue
+			}
+			nonce++
+			count++
+			time.Sleep(6 * time.Second)
+		}
+		break
 	}
 	fmt.Printf("redeem %d utxos\n", count)
 }
