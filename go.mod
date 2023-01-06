@@ -12,7 +12,7 @@ require (
 	github.com/smartbch/moeingads v0.4.2
 	github.com/smartbch/moeingdb v0.4.4-0.20220927004455-2b80890c2704
 	github.com/smartbch/moeingevm v0.4.2-0.20220509120345-27a3d288346f
-	github.com/smartbch/smartbch v0.4.5-0.20221228015841-5fe7df64ddc3
+	github.com/smartbch/smartbch v0.4.5-0.20230106094553-6e4896d66a33
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.7.0

@@ -27,6 +27,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/smartbch/smartbch/crosschain/abi"
 	"github.com/smartbch/smartbch/rpc/client"
+	"github.com/smartbch/smartbch/rpc/types"
 
 	"github.com/smartbch/testkit/ethutils"
 )
@@ -155,8 +156,7 @@ type crossUtxoInfo struct {
 }
 
 type redeemInfo struct {
-	txid   common.Hash
-	amount *uint256.Int
+	txid common.Hash
 }
 
 func makeMainChainClient(mainChainClientInfo string) *rpcclient.Client {
@@ -228,7 +228,7 @@ func main() {
 	time.Sleep(10 * time.Second)
 	if s.redeemAllMode {
 		fmt.Println("In redeem all mode !!!")
-		s.redeemAll()
+		_, _ = s.redeemAll()
 		return
 	}
 	if s.redeemAllLostAndFoundMode {
@@ -242,10 +242,19 @@ func main() {
 		// step 1. send main => side tx
 		fmt.Println("send main chain to side chain transaction...")
 		unspentUtxos := s.listUnspentUtxo(s.from)
-		if len(unspentUtxos) == 0 {
-			time.Sleep(30 * time.Second)
+		for i := 0; i < 20; i++ {
+			if len(unspentUtxos) != 0 {
+				break
+			}
 			fmt.Println("Not find unspent utxo, retry 30s later...")
-			continue
+			time.Sleep(30 * time.Second)
+			unspentUtxos = s.listUnspentUtxo(s.from)
+		}
+		if len(unspentUtxos) == 0 {
+			s.redeemAll()
+			s.redeemAllLostAndFound()
+			time.Sleep(20 * time.Minute)
+			unspentUtxos = s.listUnspentUtxo(s.from)
 		}
 		if s.transferByBurnMode {
 			fmt.Println("In transfer by burn mode !!!")
@@ -293,46 +302,66 @@ func main() {
 		if s.lostAndFoundBelowMinAmountMode {
 			fmt.Println("lost and found below min amount mode !!!")
 		}
-		var utxoInfos []*crossUtxoInfo
-		count := 0
-		for _, unspentUtxo := range unspentUtxos {
-			if s.lostAndFoundAboveMaxAmountMode {
-				if unspentUtxo.Amount < s.maxCCAmount+0.00001 {
+		for {
+			var utxoInfos []*crossUtxoInfo
+			count := 0
+			for _, unspentUtxo := range unspentUtxos {
+				if s.lostAndFoundAboveMaxAmountMode {
+					if unspentUtxo.Amount < s.maxCCAmount+0.00001 {
+						continue
+					}
+				}
+				if s.lostAndFoundBelowMinAmountMode {
+					// we should make the amount in (0.0006, 0.001), so the utxo will trigger lost and found below minCCAmount
+					if unspentUtxo.Amount >= 0.0008 {
+						txid, _ := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(70000), s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
+						fmt.Printf("txid:%s\n", txid.String())
+						return
+					} else {
+						continue
+					}
+				}
+				txHash, err := s.transferToSideChain(unspentUtxo, s.to)
+				if err != nil {
+					fmt.Printf("transfer to side chain failed: %s\n", err.Error())
 					continue
 				}
-			}
-			if s.lostAndFoundBelowMinAmountMode {
-				// we should make the amount in (0.0006, 0.001), so the utxo will trigger lost and found below minCCAmount
-				if unspentUtxo.Amount >= 0.0008 {
-					txid, _ := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(70000), s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
-					fmt.Printf("txid:%s\n", txid.String())
-					return
-				} else {
-					continue
+				txid, ok := big.NewInt(0).SetString(txHash.String(), 16)
+				if !ok {
+					panic(fmt.Sprintf("convert tx hash %s to big.Int failed", txHash.String()))
 				}
+				utxoInfos = append(utxoInfos, &crossUtxoInfo{
+					txid:   txid,
+					amount: big.NewInt(int64(math.Round(unspentUtxo.Amount*1e8)) - s.fee),
+				})
+				count++
 			}
-			txHash, err := s.transferToSideChain(unspentUtxo, s.to)
-			if err != nil {
-				fmt.Printf("transfer to side chain failed: %s\n", err.Error())
-				continue
+			if count != 0 {
+				break
 			}
-			txid, ok := big.NewInt(0).SetString(txHash.String(), 16)
-			if !ok {
-				panic(fmt.Sprintf("convert tx hash %s to big.Int failed", txHash.String()))
+			// there has no valid utxo, maybe should redeem some.
+			for k := 0; ; k++ {
+				s.redeemAll()
+				s.redeemAllLostAndFound()
+				time.Sleep(time.Duration(k) * 12 * time.Minute)
+				for i := 0; i < 20; i++ {
+					unspentUtxos = s.listUnspentUtxo(s.from)
+					if len(unspentUtxos) == 0 {
+						time.Sleep(10 * time.Second)
+						continue
+					}
+					break
+				}
+				if len(unspentUtxos) != 0 {
+					break
+				}
+				fmt.Println("unspentUtxos length is zero, continue!!!")
 			}
-			utxoInfos = append(utxoInfos, &crossUtxoInfo{
-				txid:   txid,
-				amount: big.NewInt(int64(math.Round(unspentUtxo.Amount*1e8)) - s.fee),
-			})
-			count++
-			//if count == 5 {
-			//	return
-			//}
 		}
 		// step 2. wait side chain handle these cross chain utxo
 		for {
 			fmt.Println("waiting main to side tx be handled by side chain...")
-			time.Sleep(300 * time.Second)
+			time.Sleep(10 * time.Minute)
 			balanceAfter := s.getSideChainBalance(s.sideChainReceiver)
 			if balanceAfter.Gt(balanceBefore) {
 				// it means cross chain utxo handled
@@ -340,68 +369,43 @@ func main() {
 				break
 			}
 		}
-		unspentUtxos = s.listUnspentUtxo(s.from)
-		unspentUtxoNumsBefore := len(unspentUtxos)
 		// step 3. send redeem txs
-		fmt.Printf("send redeem txs...\n")
-		var redeemInfos []*redeemInfo
-		nonce := s.getNonce()
-		fmt.Printf("nonce is %d\n", nonce)
-		for _, info := range utxoInfos {
-			redeemAmount := big.NewInt(0).Mul(info.amount, big.NewInt(1e10))
-			if s.lostAndFoundAboveMaxAmountMode {
-				redeemAmount = big.NewInt(0)
-			}
-			txid, err := s.redeem(info.txid, redeemAmount, nonce)
-			if err != nil {
-				fmt.Printf("send redeem tx error:%s\n", err.Error())
-				time.Sleep(10 * time.Second)
-				nonce = s.getNonce()
-				continue
-			}
-			amount, _ := uint256.FromBig(info.amount)
-			redeemInfos = append(redeemInfos, &redeemInfo{
-				txid:   txid,
-				amount: amount,
-			})
-			nonce++
-			time.Sleep(8 * time.Second)
-		}
-		// todo:
-		s.redeemAll()
-		time.Sleep(18 * time.Second)
+		redeemTimes := 0
 		successRedeemNums := 0
-		for _, info := range redeemInfos {
-			//fmt.Printf("please check the redeem tx status:%s\n", info.txid)
-			receipt, err := s.smartbchClient.TransactionReceipt(context.Background(), info.txid)
-			if err != nil {
-				fmt.Printf("get %s receipt failed:%s\n", info.txid, err.Error())
-				continue
-			}
-			if receipt.Status != uint64(1) {
-				out, _ := json.MarshalIndent(receipt, "", "  ")
-				fmt.Printf("redeem tx failed, receipt:%s\n", string(out))
-				continue
-			}
-			s.totalAmountS2M = uint256.NewInt(0).Add(s.totalAmountS2M, info.amount)
-			s.totalTxNumsS2M++
-			successRedeemNums++
-		}
-		// step 4. check main chain sender balance, if redeem success, it will increase and amount of unspent utxo will increase too.
 		for {
-			unspentUtxos = s.listUnspentUtxo(s.from)
-			unspentUtxoNumsAfter := len(unspentUtxos)
-			if unspentUtxoNumsAfter >= unspentUtxoNumsBefore+successRedeemNums {
-				fmt.Printf("redeem successs, we get %d new unspent utxo\n", unspentUtxoNumsAfter-unspentUtxoNumsBefore)
-				for _, un := range unspentUtxos {
-					out, _ := json.MarshalIndent(un, "", "  ")
-					fmt.Println(string(out))
+			totalRedeemableNums, redeemInfos := s.redeemAll()
+			time.Sleep(10 * time.Second)
+			for _, info := range redeemInfos {
+				receipt, err := s.smartbchClient.TransactionReceipt(context.Background(), info.txid)
+				if err != nil {
+					fmt.Printf("get %s receipt failed:%s\n", info.txid, err.Error())
+					continue
 				}
+				if receipt.Status != uint64(1) {
+					out, _ := json.MarshalIndent(receipt, "", "  ")
+					fmt.Printf("redeem tx failed, receipt:%s\n", string(out))
+					continue
+				}
+				s.totalTxNumsS2M++
+				successRedeemNums++
+			}
+			if !(totalRedeemableNums != 0 && successRedeemNums == 0) {
 				break
 			}
-			fmt.Println("waiting operator handle the redeem txs...")
-			time.Sleep(300 * time.Second)
+			successRedeemNums = 0
+			redeemTimes++
+			if redeemTimes > 6 {
+				redeemTimes = 6 // 1hour
+			}
+			// not wasting gas fee if cc pause, todo: change to check ccInfo.MonitorsWithPauseCommand
+			time.Sleep(time.Duration(redeemTimes) * 10 * time.Minute)
+			fmt.Println("redeem nothing, new round for redeem!!!")
 		}
+		// redeem all lostAndFound by the way, not check result
+		s.redeemAllLostAndFound()
+		// wait redeem tx mint in main chain
+		time.Sleep(10 * time.Minute)
+
 		timeAfter := time.Now().Unix()
 		fmt.Printf(`
 	Summary:
@@ -412,8 +416,7 @@ func main() {
 	total txs from side chain to main chain:%d
 	total time:%d
 	`, successRedeemNums, s.totalAmountM2S.Uint64(), s.totalAmountS2M.Uint64(), s.totalTxNumsM2S, s.totalTxNumsS2M, timeAfter-timeBegin)
-		time.Sleep(300 * time.Second)
-		fmt.Printf("Another New Round Start !!!\n")
+		fmt.Printf("\nAnother New Round Start !!!\n")
 	}
 }
 
@@ -488,7 +491,7 @@ func (s *Sender) transferToSideChain(unspentUtxo btcjson.ListUnspentResult, to b
 
 func (s *Sender) transferSingleInput(unspent btcjson.ListUnspentResult, from, to bchutil.Address, amount, fee int64, nullData []byte, privateKey *bchec.PrivateKey, fromPubkey []byte) (*chainhash.Hash, error) {
 	tx := wire.NewMsgTx(2)
-	if int64(unspent.Amount*(1e8)) < amount+fee {
+	if int64(math.Round(unspent.Amount*(1e8))) < amount+fee {
 		return nil, errors.New("unspent amount not enough")
 	}
 	// add input
@@ -730,27 +733,38 @@ func (s *Sender) transferForAggregation(unspentList []btcjson.ListUnspentResult,
 	return txHash, nil
 }
 
-func (s *Sender) redeemAll() {
+//(successRedeemCount, allRedeemableCount int)
+func (s *Sender) redeemAll() (totalRedeemableNums int, redeemInfos []*redeemInfo) {
 	fmt.Println("redeem all")
-	utxoInfos, err := s.smartbchClient.RedeemableUtxos(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	nonce, err := s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
-	if err != nil {
-		panic(err)
-	}
-	count := 0
-	for _, info := range utxoInfos.Infos {
-		_, err := s.redeem(info.Txid.Big(), big.NewInt(0).Mul(big.NewInt(int64(info.Amount)), big.NewInt(1e10)), nonce)
+	var utxoInfos *types.UtxoInfos
+	var err error
+	for {
+		utxoInfos, err = s.smartbchClient.RedeemableUtxos(context.Background())
 		if err != nil {
+			fmt.Println(err)
+			time.Sleep(10 * time.Second)
 			continue
 		}
+		break
+	}
+	totalRedeemableNums = len(utxoInfos.Infos)
+	nonce := s.getNonce()
+	for _, info := range utxoInfos.Infos {
+		for {
+			txid, err := s.redeem(info.Txid.Big(), big.NewInt(0).Mul(big.NewInt(int64(info.Amount)), big.NewInt(1e10)), nonce)
+			if err != nil {
+				fmt.Println("redeem failed, retry 10s later!!!")
+				time.Sleep(10 * time.Second)
+				nonce = s.getNonce()
+				continue
+			}
+			redeemInfos = append(redeemInfos, &redeemInfo{txid: txid})
+			break
+		}
 		nonce++
-		count++
 		time.Sleep(6 * time.Second)
 	}
-	fmt.Printf("redeem %d utxos\n", count)
+	return
 }
 
 func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error) {
@@ -758,15 +772,15 @@ func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error
 	gasLimit := 4000_000
 	gasPrice := uint256.NewInt(10_000_000_000)
 	tx := ethutils.NewTx(nonce, &ccContractAddress, amount, uint64(gasLimit), gasPrice.ToBig(), data)
-	out, err := tx.MarshalJSON()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("redeem tx:%s\n", string(out))
 	signedTx, err := ethutils.SignTx(tx, s.chainId.ToBig(), s.sideChainReceiverKey)
 	if err != nil {
 		panic(err)
 	}
+	out, err := signedTx.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("redeem tx:%s\n", string(out))
 	err = s.smartbchClient.SendTransaction(context.Background(), signedTx)
 	if err != nil {
 		fmt.Println("SendTransaction:" + err.Error())
@@ -777,7 +791,6 @@ func (s *Sender) redeem(txid, amount *big.Int, nonce uint64) (common.Hash, error
 
 func (s *Sender) redeemAllLostAndFound() {
 	fmt.Println("redeem all lost and found")
-	count := 0
 	for {
 		utxoInfos, err := s.smartbchClient.LostAndFoundUtxos(context.Background())
 		if err != nil {
@@ -785,22 +798,17 @@ func (s *Sender) redeemAllLostAndFound() {
 			time.Sleep(10 * time.Second)
 			continue
 		}
-		nonce, err := s.smartbchClient.NonceAt(context.Background(), common.HexToAddress(s.sideChainReceiver), nil)
-		if err != nil {
-			fmt.Println(err)
-			time.Sleep(10 * time.Second)
-			continue
-		}
+		nonce := s.getNonce()
 		for _, info := range utxoInfos.Infos {
 			_, err := s.redeem(info.Txid.Big(), big.NewInt(0), nonce)
 			if err != nil {
+				time.Sleep(10 * time.Second)
+				nonce = s.getNonce()
 				continue
 			}
 			nonce++
-			count++
 			time.Sleep(6 * time.Second)
 		}
 		break
 	}
-	fmt.Printf("redeem %d utxos\n", count)
 }
