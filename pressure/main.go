@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -79,7 +78,7 @@ func newSender() *Sender {
 	var wif string
 	var sideChainReceiverK string
 	var utxoSeparationMode bool = false
-	var redeemAllMode bool = true
+	var redeemAllMode bool = false
 	var lostAndFoundAboveMaxAmountMode bool = false
 	var lostAndFoundBelowMinAmountMode bool = false
 	var redeemAllLostAndFoundMode bool = false
@@ -116,9 +115,9 @@ func newSender() *Sender {
 		redeemAllLostAndFoundMode:              redeemAllLostAndFoundMode,
 		transferByBurnMode:                     transferByBurnMode,
 		aggregationMode:                        aggregationMode,
-		minCCAmount:                            0.001,
+		minCCAmount:                            0.0001,
 		maxCCAmount:                            0.01,
-		fee:                                    1000,
+		fee:                                    700,
 		totalAmountM2S:                         uint256.NewInt(0),
 		totalAmountS2M:                         uint256.NewInt(0),
 	}
@@ -136,7 +135,7 @@ func newSender() *Sender {
 	}
 	s.covenantAddress = strings.TrimPrefix(ccInfo.CurrCovenantAddress, "0x")
 	if ccInfo.LastCovenantAddress != "0x0000000000000000000000000000000000000000" {
-		s.oldCovenantAddress = ccInfo.LastCovenantAddress
+		s.oldCovenantAddress = strings.TrimPrefix(ccInfo.LastCovenantAddress, "0x")
 	}
 	s.initMainChainFields(wif)
 	fmt.Printf(`
@@ -225,7 +224,6 @@ func (s *Sender) initSideChainFields(sideChainReceiverK string) {
 
 func main() {
 	s := newSender()
-	time.Sleep(10 * time.Second)
 	if s.redeemAllMode {
 		fmt.Println("In redeem all mode !!!")
 		_, _ = s.redeemAll()
@@ -236,189 +234,212 @@ func main() {
 		s.redeemAllLostAndFound()
 		return
 	}
-	for {
-		timeBegin := time.Now().Unix()
-		balanceBefore := s.getSideChainBalance(s.sideChainReceiver)
-		// step 1. send main => side tx
-		fmt.Println("send main chain to side chain transaction...")
+	if s.utxoSeparationMode {
+		fmt.Println("In utxo separation mode !!!")
 		unspentUtxos := s.listUnspentUtxo(s.from)
-		for i := 0; i < 20; i++ {
-			if len(unspentUtxos) != 0 {
-				break
-			}
-			fmt.Println("Not find unspent utxo, retry 30s later...")
-			time.Sleep(30 * time.Second)
-			unspentUtxos = s.listUnspentUtxo(s.from)
-		}
-		if len(unspentUtxos) == 0 {
-			s.redeemAll()
-			s.redeemAllLostAndFound()
-			time.Sleep(20 * time.Minute)
-			unspentUtxos = s.listUnspentUtxo(s.from)
-		}
-		if s.transferByBurnMode {
-			fmt.Println("In transfer by burn mode !!!")
-			count := 0
-			for _, unspent := range unspentUtxos {
-				err := s.transferByBurn(unspent)
-				if err == nil {
-					count++
-				}
-				if count == 10 {
-					return
-				}
-			}
-		}
-		if s.lostAndFoundWithOldCovenantAddressMode {
-			fmt.Println("In lostAndFoundWithOldCovenantAddress mode !!!")
-			count := 0
-			if s.oldCovenantAddress == "" {
-				fmt.Println("old covenant address is zero")
-				return
-			}
-			for _, unspent := range unspentUtxos {
-				_, err := s.transferToSideChain(unspent, s.oldTo)
-				if err == nil {
-					count++
-				}
-				if count == 10 {
-					return
-				}
-			}
-		}
-		if s.aggregationMode {
-			fmt.Println("In utxo aggregation mode !!!")
-			s.UtxosAggregation(unspentUtxos, 0.003, 0.001)
-			return
-		}
-		if s.utxoSeparationMode {
-			fmt.Println("In utxo separation mode !!!")
-			s.utxoSeparation(unspentUtxos)
-			return
-		}
-		if s.lostAndFoundAboveMaxAmountMode {
-			fmt.Println("lost and found above max amount mode !!!")
-		}
-		if s.lostAndFoundBelowMinAmountMode {
-			fmt.Println("lost and found below min amount mode !!!")
-		}
-		for {
-			var utxoInfos []*crossUtxoInfo
-			count := 0
-			for _, unspentUtxo := range unspentUtxos {
-				if s.lostAndFoundAboveMaxAmountMode {
-					if unspentUtxo.Amount < s.maxCCAmount+0.00001 {
-						continue
-					}
-				}
-				if s.lostAndFoundBelowMinAmountMode {
-					// we should make the amount in (0.0006, 0.001), so the utxo will trigger lost and found below minCCAmount
-					if unspentUtxo.Amount >= 0.0008 {
-						txid, _ := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(70000), s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
-						fmt.Printf("txid:%s\n", txid.String())
-						return
-					} else {
-						continue
-					}
-				}
-				txHash, err := s.transferToSideChain(unspentUtxo, s.to)
-				if err != nil {
-					fmt.Printf("transfer to side chain failed: %s\n", err.Error())
-					continue
-				}
-				txid, ok := big.NewInt(0).SetString(txHash.String(), 16)
-				if !ok {
-					panic(fmt.Sprintf("convert tx hash %s to big.Int failed", txHash.String()))
-				}
-				utxoInfos = append(utxoInfos, &crossUtxoInfo{
-					txid:   txid,
-					amount: big.NewInt(int64(math.Round(unspentUtxo.Amount*1e8)) - s.fee),
-				})
-				count++
-			}
-			if count != 0 {
-				break
-			}
-			// there has no valid utxo, maybe should redeem some.
-			for k := 0; ; k++ {
-				s.redeemAll()
-				s.redeemAllLostAndFound()
-				time.Sleep(time.Duration(k) * 12 * time.Minute)
-				for i := 0; i < 20; i++ {
-					unspentUtxos = s.listUnspentUtxo(s.from)
-					if len(unspentUtxos) == 0 {
-						time.Sleep(10 * time.Second)
-						continue
-					}
-					break
-				}
-				if len(unspentUtxos) != 0 {
-					break
-				}
-				fmt.Println("unspentUtxos length is zero, continue!!!")
-			}
-		}
-		// step 2. wait side chain handle these cross chain utxo
-		for {
-			fmt.Println("waiting main to side tx be handled by side chain...")
-			time.Sleep(10 * time.Minute)
-			balanceAfter := s.getSideChainBalance(s.sideChainReceiver)
-			if balanceAfter.Gt(balanceBefore) {
-				// it means cross chain utxo handled
-				fmt.Printf("side chain receiver:%s, balance increase:%s\n", s.sideChainReceiver, uint256.NewInt(0).Sub(balanceAfter, balanceBefore).String())
-				break
-			}
-		}
-		// step 3. send redeem txs
-		redeemTimes := 0
-		successRedeemNums := 0
-		for {
-			totalRedeemableNums, redeemInfos := s.redeemAll()
-			time.Sleep(10 * time.Second)
-			for _, info := range redeemInfos {
-				receipt, err := s.smartbchClient.TransactionReceipt(context.Background(), info.txid)
-				if err != nil {
-					fmt.Printf("get %s receipt failed:%s\n", info.txid, err.Error())
-					continue
-				}
-				if receipt.Status != uint64(1) {
-					out, _ := json.MarshalIndent(receipt, "", "  ")
-					fmt.Printf("redeem tx failed, receipt:%s\n", string(out))
-					continue
-				}
-				s.totalTxNumsS2M++
-				successRedeemNums++
-			}
-			if !(totalRedeemableNums != 0 && successRedeemNums == 0) {
-				break
-			}
-			successRedeemNums = 0
-			redeemTimes++
-			if redeemTimes > 6 {
-				redeemTimes = 6 // 1hour
-			}
-			// not wasting gas fee if cc pause, todo: change to check ccInfo.MonitorsWithPauseCommand
-			time.Sleep(time.Duration(redeemTimes) * 10 * time.Minute)
-			fmt.Println("redeem nothing, new round for redeem!!!")
-		}
-		// redeem all lostAndFound by the way, not check result
-		s.redeemAllLostAndFound()
-		// wait redeem tx mint in main chain
-		time.Sleep(10 * time.Minute)
-
-		timeAfter := time.Now().Unix()
-		fmt.Printf(`
-	Summary:
-	transfer %d cross tx this round
-	total bch from main chain to side chain:%d
-	total bch from side chain to main chain:%d
-	total txs from main chain to side chain:%d
-	total txs from side chain to main chain:%d
-	total time:%d
-	`, successRedeemNums, s.totalAmountM2S.Uint64(), s.totalAmountS2M.Uint64(), s.totalTxNumsM2S, s.totalTxNumsS2M, timeAfter-timeBegin)
-		fmt.Printf("\nAnother New Round Start !!!\n")
+		s.utxoSeparation(unspentUtxos)
+		return
 	}
+	s.simpleRun()
 }
+
+//
+//func main() {
+//	s := newSender()
+//	time.Sleep(10 * time.Second)
+//	if s.redeemAllMode {
+//		fmt.Println("In redeem all mode !!!")
+//		_, _ = s.redeemAll()
+//		return
+//	}
+//	if s.redeemAllLostAndFoundMode {
+//		fmt.Println("redeem all lost and found mode !!!")
+//		s.redeemAllLostAndFound()
+//		return
+//	}
+//	for {
+//		timeBegin := time.Now().Unix()
+//		balanceBefore := s.getSideChainBalance(s.sideChainReceiver)
+//		// step 1. send main => side tx
+//		fmt.Println("send main chain to side chain transaction...")
+//		unspentUtxos := s.listUnspentUtxo(s.from)
+//		for i := 0; i < 20; i++ {
+//			if len(unspentUtxos) != 0 {
+//				break
+//			}
+//			fmt.Println("Not find unspent utxo, retry 30s later...")
+//			time.Sleep(30 * time.Second)
+//			unspentUtxos = s.listUnspentUtxo(s.from)
+//		}
+//		if len(unspentUtxos) == 0 {
+//			s.redeemAll()
+//			s.redeemAllLostAndFound()
+//			time.Sleep(20 * time.Minute)
+//			unspentUtxos = s.listUnspentUtxo(s.from)
+//		}
+//		if s.transferByBurnMode {
+//			fmt.Println("In transfer by burn mode !!!")
+//			count := 0
+//			for _, unspent := range unspentUtxos {
+//				err := s.transferByBurn(unspent)
+//				if err == nil {
+//					count++
+//				}
+//				if count == 10 {
+//					return
+//				}
+//			}
+//		}
+//		if s.lostAndFoundWithOldCovenantAddressMode {
+//			fmt.Println("In lostAndFoundWithOldCovenantAddress mode !!!")
+//			count := 0
+//			if s.oldCovenantAddress == "" {
+//				fmt.Println("old covenant address is zero")
+//				return
+//			}
+//			for _, unspent := range unspentUtxos {
+//				_, err := s.transferToSideChain(unspent, s.oldTo)
+//				if err == nil {
+//					count++
+//				}
+//				if count == 10 {
+//					return
+//				}
+//			}
+//		}
+//		if s.aggregationMode {
+//			fmt.Println("In utxo aggregation mode !!!")
+//			s.UtxosAggregation(unspentUtxos, 0.003, 0.001)
+//			return
+//		}
+//		if s.utxoSeparationMode {
+//			fmt.Println("In utxo separation mode !!!")
+//			s.utxoSeparation(unspentUtxos)
+//			return
+//		}
+//		if s.lostAndFoundAboveMaxAmountMode {
+//			fmt.Println("lost and found above max amount mode !!!")
+//		}
+//		if s.lostAndFoundBelowMinAmountMode {
+//			fmt.Println("lost and found below min amount mode !!!")
+//		}
+//		for {
+//			var utxoInfos []*crossUtxoInfo
+//			count := 0
+//			for _, unspentUtxo := range unspentUtxos {
+//				if s.lostAndFoundAboveMaxAmountMode {
+//					if unspentUtxo.Amount < s.maxCCAmount+0.00001 {
+//						continue
+//					}
+//				}
+//				if s.lostAndFoundBelowMinAmountMode {
+//					// we should make the amount in (0.0006, 0.001), so the utxo will trigger lost and found below minCCAmount
+//					if unspentUtxo.Amount >= 0.0008 {
+//						txid, _ := s.transferSingleInput(unspentUtxo, s.from, s.to, int64(70000), s.fee, []byte(s.sideChainReceiver), s.wif.PrivKey, s.wif.SerializePubKey())
+//						fmt.Printf("txid:%s\n", txid.String())
+//						return
+//					} else {
+//						continue
+//					}
+//				}
+//				txHash, err := s.transferToSideChain(unspentUtxo, s.to)
+//				if err != nil {
+//					fmt.Printf("transfer to side chain failed: %s\n", err.Error())
+//					continue
+//				}
+//				txid, ok := big.NewInt(0).SetString(txHash.String(), 16)
+//				if !ok {
+//					panic(fmt.Sprintf("convert tx hash %s to big.Int failed", txHash.String()))
+//				}
+//				utxoInfos = append(utxoInfos, &crossUtxoInfo{
+//					txid:   txid,
+//					amount: big.NewInt(int64(math.Round(unspentUtxo.Amount*1e8)) - s.fee),
+//				})
+//				count++
+//			}
+//			if count != 0 {
+//				break
+//			}
+//			// there has no valid utxo, maybe should redeem some.
+//			for k := 0; ; k++ {
+//				s.redeemAll()
+//				s.redeemAllLostAndFound()
+//				time.Sleep(time.Duration(k) * 12 * time.Minute)
+//				for i := 0; i < 20; i++ {
+//					unspentUtxos = s.listUnspentUtxo(s.from)
+//					if len(unspentUtxos) == 0 {
+//						time.Sleep(10 * time.Second)
+//						continue
+//					}
+//					break
+//				}
+//				if len(unspentUtxos) != 0 {
+//					break
+//				}
+//				fmt.Println("unspentUtxos length is zero, continue!!!")
+//			}
+//		}
+//		// step 2. wait side chain handle these cross chain utxo
+//		for {
+//			fmt.Println("waiting main to side tx be handled by side chain...")
+//			time.Sleep(10 * time.Minute)
+//			balanceAfter := s.getSideChainBalance(s.sideChainReceiver)
+//			if balanceAfter.Gt(balanceBefore) {
+//				// it means cross chain utxo handled
+//				fmt.Printf("side chain receiver:%s, balance increase:%s\n", s.sideChainReceiver, uint256.NewInt(0).Sub(balanceAfter, balanceBefore).String())
+//				break
+//			}
+//		}
+//		// step 3. send redeem txs
+//		redeemTimes := 0
+//		successRedeemNums := 0
+//		for {
+//			totalRedeemableNums, redeemInfos := s.redeemAll()
+//			time.Sleep(10 * time.Second)
+//			for _, info := range redeemInfos {
+//				receipt, err := s.smartbchClient.TransactionReceipt(context.Background(), info.txid)
+//				if err != nil {
+//					fmt.Printf("get %s receipt failed:%s\n", info.txid, err.Error())
+//					continue
+//				}
+//				if receipt.Status != uint64(1) {
+//					out, _ := json.MarshalIndent(receipt, "", "  ")
+//					fmt.Printf("redeem tx failed, receipt:%s\n", string(out))
+//					continue
+//				}
+//				s.totalTxNumsS2M++
+//				successRedeemNums++
+//			}
+//			if !(totalRedeemableNums != 0 && successRedeemNums == 0) {
+//				break
+//			}
+//			successRedeemNums = 0
+//			redeemTimes++
+//			if redeemTimes > 6 {
+//				redeemTimes = 6 // 1hour
+//			}
+//			// not wasting gas fee if cc pause, todo: change to check ccInfo.MonitorsWithPauseCommand
+//			time.Sleep(time.Duration(redeemTimes) * 10 * time.Minute)
+//			fmt.Println("redeem nothing, new round for redeem!!!")
+//		}
+//		// redeem all lostAndFound by the way, not check result
+//		s.redeemAllLostAndFound()
+//		// wait redeem tx mint in main chain
+//		time.Sleep(10 * time.Minute)
+//
+//		timeAfter := time.Now().Unix()
+//		fmt.Printf(`
+//	Summary:
+//	transfer %d cross tx this round
+//	total bch from main chain to side chain:%d
+//	total bch from side chain to main chain:%d
+//	total txs from main chain to side chain:%d
+//	total txs from side chain to main chain:%d
+//	total time:%d
+//	`, successRedeemNums, s.totalAmountM2S.Uint64(), s.totalAmountS2M.Uint64(), s.totalTxNumsM2S, s.totalTxNumsS2M, timeAfter-timeBegin)
+//		fmt.Printf("\nAnother New Round Start !!!\n")
+//	}
+//}
 
 func (s *Sender) getSideChainBalance(address string) *uint256.Int {
 	var out *uint256.Int
@@ -563,14 +584,14 @@ func (s *Sender) checkMainChainTxStatus(txHash *chainhash.Hash) error {
 func (s *Sender) utxoSeparation(unspentUtxos []btcjson.ListUnspentResult) {
 	for _, unspent := range unspentUtxos {
 		// 8x minCCAmount
-		if int64(math.Round(unspent.Amount*1e8)) > int64(s.minCCAmount*1e8*8)+s.fee {
-			outAmount := (int64(math.Round(unspent.Amount*1e8)) - s.fee) / 4
+		if int64(math.Round(unspent.Amount*1e8)) > int64(s.minCCAmount*1e8*8)+1000 {
+			outAmount := (int64(math.Round(unspent.Amount*1e8)) - 1000) / 4
 			fmt.Printf("separate tx %s to 4 parts, which amount is %d\n", unspent.TxID, outAmount)
-			_, _ = s.transferForSeparation(unspent, s.from, outAmount, 4, s.fee, s.wif.PrivKey, s.wif.SerializePubKey())
-		} else if int64(math.Round(unspent.Amount*1e8)) > int64(s.minCCAmount*1e8*4)+s.fee /* 4x minCCAmount */ {
-			outAmount := (int64(math.Round(unspent.Amount*1e8)) - s.fee) / 2
+			_, _ = s.transferForSeparation(unspent, s.from, outAmount, 4, 1000, s.wif.PrivKey, s.wif.SerializePubKey())
+		} else if int64(math.Round(unspent.Amount*1e8)) > int64(s.minCCAmount*1e8*4)+1000 /* 4x minCCAmount */ {
+			outAmount := (int64(math.Round(unspent.Amount*1e8)) - 1000) / 2
 			fmt.Printf("separate tx %s to 2 parts, which amount is %d\n", unspent.TxID, outAmount)
-			_, _ = s.transferForSeparation(unspent, s.from, outAmount, 2, s.fee, s.wif.PrivKey, s.wif.SerializePubKey())
+			_, _ = s.transferForSeparation(unspent, s.from, outAmount, 2, 1000, s.wif.PrivKey, s.wif.SerializePubKey())
 		}
 	}
 }
@@ -810,5 +831,75 @@ func (s *Sender) redeemAllLostAndFound() {
 			time.Sleep(6 * time.Second)
 		}
 		break
+	}
+}
+
+func (s *Sender) simpleRun() {
+	fmt.Println("simple run...")
+	go func() {
+		for {
+			if !s.isPaused() {
+				s.redeemAll()
+				s.redeemAllLostAndFound()
+			}
+			time.Sleep(20 * time.Minute)
+		}
+	}()
+	go func() {
+		for {
+			unspentUtxos := s.listUnspentUtxo(s.from)
+			s.updateTo()
+			for _, unspent := range unspentUtxos {
+				_, err := s.transferToSideChain(unspent, s.to)
+				if err != nil {
+					fmt.Println(err)
+				}
+			}
+			time.Sleep(10 * time.Minute)
+		}
+	}()
+	select {}
+}
+
+func (s *Sender) updateTo() {
+	var ccInfo *types.CcInfo
+	var err error
+	for {
+		ccInfo, err = s.smartbchClient.CcInfo(context.Background())
+		if err != nil {
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		break
+	}
+	currCovenantAddressInCcInfo := strings.TrimPrefix(strings.ToLower(ccInfo.CurrCovenantAddress), "0x")
+	currCovenantAddressLocal := strings.TrimPrefix(strings.ToLower(s.covenantAddress), "0x")
+	if currCovenantAddressInCcInfo != currCovenantAddressLocal {
+		s.covenantAddress = currCovenantAddressInCcInfo
+		pkhTo, err := hex.DecodeString(s.covenantAddress)
+		if err != nil {
+			panic(err)
+		}
+		s.to, _ = bchutil.NewAddressScriptHashFromHash(pkhTo, &chaincfg.TestNet3Params)
+		fmt.Printf("change covenant address from %s to %s\n", currCovenantAddressLocal, currCovenantAddressInCcInfo)
+	}
+}
+
+func (s *Sender) isPaused() bool {
+	var info *types.CcInfo
+	var err error
+	for {
+		info, err = s.smartbchClient.CcInfo(context.Background())
+		if err != nil {
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		break
+	}
+	if len(info.MonitorsWithPauseCommand) == 0 {
+		return false
+	} else {
+		fmt.Println("isPaused")
+		return true
 	}
 }
